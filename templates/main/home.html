@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - Drafting Engineering Flow{% endblock %}
+
+{% block content %}
+<div class="hero min-h-screen bg-base-200">
+    <div class="hero-content text-center">
+        <div class="max-w-md">
+            <h1 class="text-5xl font-bold">Welcome to Drafting Engineering Flow</h1>
+            <p class="py-6">
+                A comprehensive platform for managing drafting and engineering workflows. 
+                Streamline your processes and improve collaboration across teams.
+            </p>
+            
+            {% if user.is_authenticated %}
+                <div class="stats shadow">
+                    <div class="stat">
+                        <div class="stat-figure text-primary">
+                            <i class="fas fa-user text-2xl"></i>
+                        </div>
+                        <div class="stat-title">Welcome back</div>
+                        <div class="stat-value text-primary">{{ user.username }}</div>
+                        <div class="stat-desc">Ready to get started?</div>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
+                    <div class="card bg-base-100 shadow-xl">
+                        <div class="card-body">
+                            <h2 class="card-title">
+                                <i class="fas fa-project-diagram text-primary"></i>
+                                Projects
+                            </h2>
+                            <p>Manage your drafting projects and track progress.</p>
+                            <div class="card-actions justify-end">
+                                <button class="btn btn-primary">View Projects</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card bg-base-100 shadow-xl">
+                        <div class="card-body">
+                            <h2 class="card-title">
+                                <i class="fas fa-users text-secondary"></i>
+                                Team
+                            </h2>
+                            <p>Collaborate with your engineering team.</p>
+                            <div class="card-actions justify-end">
+                                <button class="btn btn-secondary">Manage Team</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card bg-base-100 shadow-xl">
+                        <div class="card-body">
+                            <h2 class="card-title">
+                                <i class="fas fa-chart-line text-accent"></i>
+                                Analytics
+                            </h2>
+                            <p>Track performance and project metrics.</p>
+                            <div class="card-actions justify-end">
+                                <button class="btn btn-accent">View Analytics</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Please log in to access the full dashboard features.</span>
+                </div>
+                <a class="btn btn-primary btn-lg" href="{% url 'admin:login' %}">Get Started</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions Section -->
+<div class="container mx-auto px-4 py-8">
+    <h2 class="text-3xl font-bold text-center mb-8">Quick Actions</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
+            <div class="card-body text-center">
+                <i class="fas fa-plus-circle text-4xl text-primary mb-2"></i>
+                <h3 class="card-title justify-center">New Project</h3>
+                <p class="text-sm text-base-content/70">Start a new drafting project</p>
+            </div>
+        </div>
+        
+        <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
+            <div class="card-body text-center">
+                <i class="fas fa-file-upload text-4xl text-secondary mb-2"></i>
+                <h3 class="card-title justify-center">Upload Files</h3>
+                <p class="text-sm text-base-content/70">Upload drawings and documents</p>
+            </div>
+        </div>
+        
+        <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
+            <div class="card-body text-center">
+                <i class="fas fa-search text-4xl text-accent mb-2"></i>
+                <h3 class="card-title justify-center">Search</h3>
+                <p class="text-sm text-base-content/70">Find projects and files</p>
+            </div>
+        </div>
+        
+        <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
+            <div class="card-body text-center">
+                <i class="fas fa-cog text-4xl text-neutral mb-2"></i>
+                <h3 class="card-title justify-center">Settings</h3>
+                <p class="text-sm text-base-content/70">Configure your preferences</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="{{ current_theme|default:'corporate' }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Drafting Engineering Flow{% endblock %}</title>
+    
+    <!-- TailwindCSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- DaisyUI CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet" type="text/css" />
+    
+    <!-- Custom CSS -->
+    <style>
+        /* Custom styles can go here */
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="bg-base-100">
+    <!-- Left Drawer Wrapper -->
+    <div class="drawer">
+        <input id="left-drawer" type="checkbox" class="drawer-toggle" />
+        <div class="drawer-content">
+            <!-- Right Drawer Wrapper (nested) -->
+            <div class="drawer drawer-end">
+                <input id="right-drawer" type="checkbox" class="drawer-toggle" />
+                <div class="drawer-content">
+                    <!-- Navigation -->
+                    <div class="navbar bg-base-200 shadow-lg">
+                        <div class="navbar-start gap-2">
+                            <!-- Left drawer toggle -->
+                            <label for="left-drawer" class="btn btn-ghost btn-square" aria-label="Open left menu">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+                            </label>
+                            <a class="btn btn-ghost text-xl" href="{% url 'home' %}">
+                                <i class="fas fa-drafting-compass mr-2"></i>
+                                Drafting Engineering Flow
+                            </a>
+                        </div>
+                        
+                        <div class="navbar-center hidden lg:flex">
+                            <ul class="menu menu-horizontal px-1">
+                                <li><a href="{% url 'home' %}" class="{% if request.resolver_match.url_name == 'home' %}active{% endif %}">Dashboard</a></li>
+                                {% if allow_user_themes %}
+                                    <li><a href="{% url 'theme:selector' %}" class="{% if request.resolver_match.url_name == 'selector' %}active{% endif %}">
+                                        <i class="fas fa-palette mr-1"></i>Theme
+                                    </a></li>
+                                {% endif %}
+                                <!-- Add more navigation items here -->
+                            </ul>
+                        </div>
+                        
+                        <div class="navbar-end gap-2">
+                            <!-- Right drawer toggle -->
+                            <label for="right-drawer" class="btn btn-ghost btn-square" aria-label="Open right menu">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6h12M6 12h12M6 18h12" /></svg>
+                            </label>
+                            {% if user.is_authenticated %}
+                                <div class="dropdown dropdown-end">
+                                    <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar">
+                                        <div class="w-10 rounded-full">
+                                            <div class="bg-primary text-primary-content rounded-full w-10 h-10 flex items-center justify-center">
+                                                {{ user.username|first|upper }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
+                                        <li><a href="#" class="justify-between">
+                                            Profile
+                                            <span class="badge">New</span>
+                                        </a></li>
+                                        <li><a href="#">Settings</a></li>
+                                        {% if allow_user_themes %}
+                                            <li><a href="{% url 'theme:selector' %}">
+                                                <i class="fas fa-palette"></i>Theme
+                                            </a></li>
+                                        {% endif %}
+                                        <li><a href="{% url 'admin:index' %}">Admin</a></li>
+                                        <li><a href="{% url 'admin:logout' %}">Logout</a></li>
+                                    </ul>
+                                </div>
+                            {% else %}
+                                <a class="btn btn-primary" href="{% url 'admin:login' %}">Login</a>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Main Content -->
+                    <main class="container mx-auto px-4 py-8">
+                        {% if messages %}
+                            <div class="toast toast-top toast-end">
+                                {% for message in messages %}
+                                    <div class="alert alert-{{ message.tags }}">
+                                        <span>{{ message }}</span>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        {% block content %}{% endblock %}
+                    </main>
+
+                    <!-- Footer -->
+                    <footer class="footer footer-center p-4 bg-base-200 text-base-content">
+                        <aside>
+                            <p>Copyright © 2024 - Drafting Engineering Flow. All rights reserved.</p>
+                        </aside>
+                    </footer>
+                </div>
+                <!-- Right Drawer Side -->
+                <div class="drawer-side">
+                    <label for="right-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
+                    <ul class="menu p-4 w-80 min-h-full bg-base-200 text-base-content">
+                        <li class="menu-title"><span>Right Menu</span></li>
+                        <li><a href="#">Notifications</a></li>
+                        <li><a href="#">Quick Actions</a></li>
+                        <li><a href="#">Help</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <!-- Left Drawer Side -->
+        <div class="drawer-side">
+            <label for="left-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
+            <ul class="menu p-4 w-80 min-h-full bg-base-200 text-base-content">
+                <li class="menu-title"><span>Navigation</span></li>
+                <li><a href="{% url 'home' %}">Dashboard</a></li>
+                {% if allow_user_themes %}
+                    <li><a href="{% url 'theme:selector' %}">Theme</a></li>
+                {% endif %}
+                <li class="menu-title"><span>Account</span></li>
+                {% if user.is_authenticated %}
+                    <li><a href="{% url 'admin:index' %}">Admin</a></li>
+                    <li><a href="{% url 'admin:logout' %}">Logout</a></li>
+                {% else %}
+                    <li><a href="{% url 'admin:login' %}">Login</a></li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+
+    <!-- Font Awesome for icons -->
+    <script src="https://kit.fontawesome.com/your-fontawesome-kit.js" crossorigin="anonymous"></script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
