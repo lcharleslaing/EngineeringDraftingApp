@@ -1,0 +1,77 @@
+{% extends "flow_calc/base.html" %}
+{% load static %}
+
+{% block title %}Quick Add Steps{% endblock %}
+
+{% block content %}
+<div class="hero bg-base-200 py-8">
+    <div class="hero-content text-center">
+        <div class="max-w-2xl">
+            <h1 class="text-3xl font-bold mb-4">
+                <i class="fas fa-bolt text-warning mr-2"></i>Quick Add Steps
+            </h1>
+            <p class="text-lg mb-6">Add multiple steps at once using a simple format</p>
+        </div>
+    </div>
+</div>
+
+<div class="container mx-auto px-4 py-8">
+    <div class="card bg-base-100 shadow-xl max-w-4xl mx-auto">
+        <div class="card-body">
+            <!-- Instructions -->
+            <div class="alert alert-info mb-6">
+                <i class="fas fa-info-circle"></i>
+                <div>
+                    <h3 class="font-bold">Format Instructions</h3>
+                    <div class="text-sm">Enter steps one per line using this format:</div>
+                </div>
+            </div>
+            
+            <div class="mockup-code mb-6">
+                <pre><code>Step Name|Duration in Days|Dependencies (comma-separated)
+
+Examples:
+Design|5|
+Development|10|Design
+Testing|3|Development
+Deployment|2|Testing,Design</code></pre>
+            </div>
+            
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+                
+                <!-- Step Data -->
+                <div class="form-control">
+                    <label class="label" for="{{ form.step_data.id_for_label }}">
+                        <span class="label-text font-semibold">
+                            Step Data <span class="text-error">*</span>
+                        </span>
+                    </label>
+                    {{ form.step_data }}
+                    {% if form.step_data.errors %}
+                        <label class="label">
+                            <span class="label-text-alt text-error">{{ form.step_data.errors.0 }}</span>
+                        </label>
+                    {% endif %}
+                    <label class="label">
+                        <span class="label-text-alt">Enter steps one per line using the format shown above</span>
+                    </label>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="divider"></div>
+                <div class="flex gap-3 justify-end">
+                    <a href="{% url 'flow_calc:project_detail' project.pk %}" class="btn btn-outline">
+                        <i class="fas fa-arrow-left mr-2"></i>
+                        Back to Project
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus mr-2"></i>
+                        Add Steps
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

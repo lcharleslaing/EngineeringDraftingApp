@@ -23,6 +23,9 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('main.urls')),
     path('theme/', include('theme.urls')),
+    path('flow/', include('flow.urls')),
+    path('flow-calc/', include('flow_calc.urls')),
+    path('process-creator/', include(('process_creator.urls', 'process_creator'), namespace='process_creator')),
 ]
 
 # Serve media files in development

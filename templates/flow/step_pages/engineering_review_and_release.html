@@ -1,0 +1,47 @@
+{% extends 'flow/step_pages/base_step_detail.html' %}
+
+{% block step_specific_content %}
+<!-- Engineering Review & Release Specific Content -->
+<div class="card bg-base-100 shadow-xl mt-8">
+    <div class="card-body">
+        <h2 class="card-title text-2xl mb-4">
+            <i class="fas fa-search text-primary"></i>
+            Engineering Review & Release Process
+        </h2>
+        
+        <div class="prose max-w-none">
+            <h3>Technical Review</h3>
+            <ul>
+                <li>Comprehensive review of all engineering drawings</li>
+                <li>Verification of calculations and design assumptions</li>
+                <li>Check for compliance with project specifications</li>
+                <li>Validate design against applicable codes and standards</li>
+            </ul>
+            
+            <h3>Compliance Verification</h3>
+            <ul>
+                <li>Verify adherence to industry standards (ASME, ANSI, etc.)</li>
+                <li>Check compliance with safety regulations</li>
+                <li>Validate environmental and sustainability requirements</li>
+                <li>Ensure quality management system compliance</li>
+            </ul>
+            
+            <h3>Peer Review</h3>
+            <ul>
+                <li>Independent review by senior engineer</li>
+                <li>Cross-check of critical design elements</li>
+                <li>Validation of engineering judgment and decisions</li>
+                <li>Review of risk assessment and mitigation strategies</li>
+            </ul>
+            
+            <h3>Final Approval</h3>
+            <ul>
+                <li>Engineering manager sign-off on design</li>
+                <li>Final verification of all requirements</li>
+                <li>Authorization for manufacturing release</li>
+                <li>Documentation of approval and release decision</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

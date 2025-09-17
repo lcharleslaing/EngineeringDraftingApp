@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ flow_step.step_name }} - Drafting Engineering Flow{% endblock %}
+
+{% block content %}
+<div class="hero bg-base-200 py-8">
+    <div class="hero-content text-center">
+        <div class="max-w-4xl">
+            <h1 class="text-4xl font-bold mb-4">{{ flow_step.step_name }}</h1>
+            <p class="text-lg mb-6">{{ flow_step.description|default:"Workflow step management" }}</p>
+            
+            <!-- Subflows Section -->
+            {% if flow_step.subflows.exists %}
+            <div class="mb-6">
+                <h2 class="text-2xl font-semibold mb-4">Sub-Processes</h2>
+                <div class="flex flex-wrap justify-center gap-4">
+                    {% for subflow in flow_step.subflows.all %}
+                    <div class="badge badge-primary badge-lg">
+                        <i class="fas fa-cogs mr-2"></i>
+                        {{ subflow.name }}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            
+            <div class="stats shadow">
+                <div class="stat">
+                    <div class="stat-title">Total Projects</div>
+                    <div class="stat-value text-primary">{{ total_projects }}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-title">Can Start</div>
+                    <div class="stat-value text-success">{{ can_start_projects|length }}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-title">In Progress</div>
+                    <div class="stat-value text-warning">{{ in_progress_projects|length }}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-title">Blocked</div>
+                    <div class="stat-value text-error">{{ blocked_projects|length }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container mx-auto px-4 py-8">
+    <!-- Can Start Projects -->
+    {% if can_start_projects %}
+    <div class="mb-8">
+        <h2 class="text-2xl font-bold mb-4 flex items-center">
+            <i class="fas fa-play-circle text-success mr-3"></i>
+            Ready to Start
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for project_step in can_start_projects %}
+            <div class="card bg-base-100 shadow-md hover:shadow-lg">
+                <div class="card-body">
+                    <h3 class="card-title">{{ project_step.project.name }}</h3>
+                    <p class="text-sm text-base-content/70">{{ project_step.project.description|truncatechars:100 }}</p>
+                    <div class="flex justify-between items-center mt-4">
+                        <div class="badge badge-outline">{{ project_step.flow_step.formatted_duration }}</div>
+                        <a href="{% url 'flow:start_project_step' project_step.id %}" class="btn btn-success btn-sm">
+                            <i class="fas fa-play mr-1"></i>
+                            Start
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- In Progress Projects -->
+    {% if in_progress_projects %}
+    <div class="mb-8">
+        <h2 class="text-2xl font-bold mb-4 flex items-center">
+            <i class="fas fa-cog text-warning mr-3"></i>
+            In Progress
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for project_step in in_progress_projects %}
+            <div class="card bg-base-100 shadow-md hover:shadow-lg">
+                <div class="card-body">
+                    <h3 class="card-title">{{ project_step.project.name }}</h3>
+                    <p class="text-sm text-base-content/70">{{ project_step.project.description|truncatechars:100 }}</p>
+                    <div class="flex justify-between items-center mt-4">
+                        <div class="text-sm text-base-content/70">
+                            Started: {{ project_step.start_date|date:"M d, Y" }}
+                        </div>
+                        <div class="flex gap-2">
+                            <a href="{% url 'flow:complete_project_step' project_step.id %}" class="btn btn-success btn-sm">
+                                <i class="fas fa-check mr-1"></i>
+                                Complete
+                            </a>
+                            <a href="{% url 'flow:block_project_step' project_step.id %}" class="btn btn-warning btn-sm">
+                                <i class="fas fa-pause mr-1"></i>
+                                Block
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Blocked Projects -->
+    {% if blocked_projects %}
+    <div class="mb-8">
+        <h2 class="text-2xl font-bold mb-4 flex items-center">
+            <i class="fas fa-exclamation-triangle text-error mr-3"></i>
+            Blocked
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for project_step in blocked_projects %}
+            <div class="card bg-base-100 shadow-md hover:shadow-lg">
+                <div class="card-body">
+                    <h3 class="card-title">{{ project_step.project.name }}</h3>
+                    <p class="text-sm text-base-content/70">{{ project_step.project.description|truncatechars:100 }}</p>
+                    <div class="flex justify-between items-center mt-4">
+                        <div class="text-sm text-base-content/70">
+                            Blocked since: {{ project_step.updated_at|date:"M d, Y" }}
+                        </div>
+                        <a href="{% url 'flow:unblock_project_step' project_step.id %}" class="btn btn-info btn-sm">
+                            <i class="fas fa-play mr-1"></i>
+                            Unblock
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Completed Projects (Recent) -->
+    {% if completed_projects %}
+    <div class="mb-8">
+        <h2 class="text-2xl font-bold mb-4 flex items-center">
+            <i class="fas fa-check-circle text-success mr-3"></i>
+            Recently Completed
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for project_step in completed_projects %}
+            <div class="card bg-base-100 shadow-md">
+                <div class="card-body">
+                    <h3 class="card-title">{{ project_step.project.name }}</h3>
+                    <p class="text-sm text-base-content/70">{{ project_step.project.description|truncatechars:100 }}</p>
+                    <div class="flex justify-between items-center mt-4">
+                        <div class="text-sm text-base-content/70">
+                            Completed: {{ project_step.actual_completion_date|date:"M d, Y" }}
+                        </div>
+                        <div class="badge badge-success">Completed</div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- No Projects Message -->
+    {% if not can_start_projects and not in_progress_projects and not blocked_projects and not completed_projects %}
+    <div class="text-center py-12">
+        <i class="fas fa-folder-open text-6xl text-base-content/30 mb-4"></i>
+        <h3 class="text-xl font-semibold mb-2">No Projects at This Step</h3>
+        <p class="text-base-content/70 mb-6">
+            There are currently no projects at the {{ flow_step.step_name }} step.
+        </p>
+        <a href="{% url 'admin:flow_project_add' %}" class="btn btn-primary">
+            <i class="fas fa-plus mr-2"></i>
+            Create New Project
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

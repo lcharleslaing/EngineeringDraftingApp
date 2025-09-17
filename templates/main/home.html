@@ -3,17 +3,17 @@
 {% block title %}{{ title }} - Drafting Engineering Flow{% endblock %}
 
 {% block content %}
-<div class="hero min-h-screen bg-base-200">
+<div class="hero bg-base-200 py-12">
     <div class="hero-content text-center">
-        <div class="max-w-md">
-            <h1 class="text-5xl font-bold">Welcome to Drafting Engineering Flow</h1>
-            <p class="py-6">
+        <div class="max-w-4xl">
+            <h1 class="text-5xl font-bold mb-4">Welcome to Drafting Engineering Flow</h1>
+            <p class="text-xl mb-8">
                 A comprehensive platform for managing drafting and engineering workflows. 
                 Streamline your processes and improve collaboration across teams.
             </p>
             
             {% if user.is_authenticated %}
-                <div class="stats shadow">
+                <div class="stats shadow mb-8">
                     <div class="stat">
                         <div class="stat-figure text-primary">
                             <i class="fas fa-user text-2xl"></i>
@@ -23,92 +23,446 @@
                         <div class="stat-desc">Ready to get started?</div>
                     </div>
                 </div>
-                
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-                    <div class="card bg-base-100 shadow-xl">
-                        <div class="card-body">
-                            <h2 class="card-title">
-                                <i class="fas fa-project-diagram text-primary"></i>
-                                Projects
-                            </h2>
-                            <p>Manage your drafting projects and track progress.</p>
-                            <div class="card-actions justify-end">
-                                <button class="btn btn-primary">View Projects</button>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="card bg-base-100 shadow-xl">
-                        <div class="card-body">
-                            <h2 class="card-title">
-                                <i class="fas fa-users text-secondary"></i>
-                                Team
-                            </h2>
-                            <p>Collaborate with your engineering team.</p>
-                            <div class="card-actions justify-end">
-                                <button class="btn btn-secondary">Manage Team</button>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="card bg-base-100 shadow-xl">
-                        <div class="card-body">
-                            <h2 class="card-title">
-                                <i class="fas fa-chart-line text-accent"></i>
-                                Analytics
-                            </h2>
-                            <p>Track performance and project metrics.</p>
-                            <div class="card-actions justify-end">
-                                <button class="btn btn-accent">View Analytics</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            {% else %}
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle"></i>
-                    <span>Please log in to access the full dashboard features.</span>
-                </div>
-                <a class="btn btn-primary btn-lg" href="{% url 'admin:login' %}">Get Started</a>
             {% endif %}
         </div>
     </div>
 </div>
 
-<!-- Quick Actions Section -->
+<!-- Main Dashboard Content -->
 <div class="container mx-auto px-4 py-8">
-    <h2 class="text-3xl font-bold text-center mb-8">Quick Actions</h2>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
-            <div class="card-body text-center">
-                <i class="fas fa-plus-circle text-4xl text-primary mb-2"></i>
-                <h3 class="card-title justify-center">New Project</h3>
-                <p class="text-sm text-base-content/70">Start a new drafting project</p>
+    <!-- Flow Apps Container -->
+    <div class="mb-12">
+        <div class="flex items-center mb-6">
+            <div class="flex-1">
+                <h2 class="text-3xl font-bold">
+                    <i class="fas fa-project-diagram text-primary mr-3"></i>
+                    Engineering Flow
+                </h2>
+                <p class="text-base-content/70 mt-2">
+                    Sequential workflow steps that must be completed in order
+                </p>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="badge badge-primary badge-lg">
+                    <i class="fas fa-clock mr-1"></i>
+                    {{ flow_steps|length }} Steps
+                </div>
+                <a href="{% url 'flow:create_project' %}" class="btn btn-primary btn-sm">
+                    <i class="fas fa-plus mr-1"></i>
+                    New Project
+                </a>
             </div>
         </div>
         
-        <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
-            <div class="card-body text-center">
-                <i class="fas fa-file-upload text-4xl text-secondary mb-2"></i>
-                <h3 class="card-title justify-center">Upload Files</h3>
-                <p class="text-sm text-base-content/70">Upload drawings and documents</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for step in flow_steps %}
+                {% if step.app_name == 'approval_prints' and step.app_name in user_accessible_apps %}
+                    <div class="card bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 hover:border-blue-300 transition-all hover:shadow-lg">
+                        <div class="card-body">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="badge badge-primary">Step {{ step.order }}</div>
+                                <div class="badge badge-outline">{{ step.formatted_duration }}</div>
+                            </div>
+                            
+                            <!-- Statistics Row -->
+                            <div class="flex items-center justify-between mb-3 text-xs">
+                                <div class="flex items-center gap-2">
+                                    <span class="badge badge-info badge-sm">{{ step.total_projects }} total</span>
+                                    {% if step.in_progress_count > 0 %}
+                                        <span class="badge badge-success badge-sm">{{ step.in_progress_count }} active</span>
+                                    {% endif %}
+                                    {% if step.pending_count > 0 %}
+                                        <span class="badge badge-warning badge-sm">{{ step.pending_count }} pending</span>
+                                    {% endif %}
+                                    {% if step.blocked_count > 0 %}
+                                        <span class="badge badge-error badge-sm">{{ step.blocked_count }} blocked</span>
+                                    {% endif %}
+                                </div>
+                                {% if step.subflow_count > 0 %}
+                                    <span class="text-base-content/60">
+                                        <i class="fas fa-sitemap mr-1"></i>{{ step.subflow_count }} sub-process{{ step.subflow_count|pluralize:"es" }}
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <h3 class="card-title text-xl">
+                                <i class="fas fa-check-circle text-blue-600"></i>
+                                {{ step.step_name }}
+                            </h3>
+                            <p class="text-sm text-base-content/70 mb-4">
+                                {{ step.description|default:"Initial approval and review of prints before customer submission" }}
+                            </p>
+                            <div class="card-actions justify-end gap-2">
+                                <a href="{% url 'flow:step_detail' step.app_name %}" class="btn btn-primary btn-sm">
+                                    <i class="fas fa-folder-open mr-1"></i>
+                                    Open
+                                </a>
+                                <a href="{% url 'flow:step_detail_page' step.app_name %}" class="btn btn-outline btn-sm">
+                                    <i class="fas fa-info-circle mr-1"></i>
+                                    Details
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+            
+            {% for step in flow_steps %}
+                {% if step.app_name == 'prints_to_customer' and step.app_name in user_accessible_apps %}
+                    <div class="card bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200 hover:border-green-300 transition-all hover:shadow-lg">
+                        <div class="card-body">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="badge badge-success">Step {{ step.order }}</div>
+                                <div class="badge badge-outline">{{ step.formatted_duration }}</div>
+                            </div>
+                            
+                            <!-- Statistics Row -->
+                            <div class="flex items-center justify-between mb-3 text-xs">
+                                <div class="flex items-center gap-2">
+                                    <span class="badge badge-info badge-sm">{{ step.total_projects }} total</span>
+                                    {% if step.in_progress_count > 0 %}
+                                        <span class="badge badge-success badge-sm">{{ step.in_progress_count }} active</span>
+                                    {% endif %}
+                                    {% if step.pending_count > 0 %}
+                                        <span class="badge badge-warning badge-sm">{{ step.pending_count }} pending</span>
+                                    {% endif %}
+                                    {% if step.blocked_count > 0 %}
+                                        <span class="badge badge-error badge-sm">{{ step.blocked_count }} blocked</span>
+                                    {% endif %}
+                                </div>
+                                {% if step.subflow_count > 0 %}
+                                    <span class="text-base-content/60">
+                                        <i class="fas fa-sitemap mr-1"></i>{{ step.subflow_count }} sub-process{{ step.subflow_count|pluralize:"es" }}
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <h3 class="card-title text-xl">
+                                <i class="fas fa-share text-green-600"></i>
+                                {{ step.step_name }}
+                            </h3>
+                            <p class="text-sm text-base-content/70 mb-4">
+                                {{ step.description|default:"Send approved prints to customer for review and feedback" }}
+                            </p>
+                            <div class="card-actions justify-end gap-2">
+                                <a href="{% url 'flow:step_detail' step.app_name %}" class="btn btn-success btn-sm">
+                                    <i class="fas fa-folder-open mr-1"></i>
+                                    Open
+                                </a>
+                                <a href="{% url 'flow:step_detail_page' step.app_name %}" class="btn btn-outline btn-sm">
+                                    <i class="fas fa-info-circle mr-1"></i>
+                                    Details
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                {% elif step.app_name == 'long_lead_release' and step.app_name in user_accessible_apps %}
+                    <div class="card bg-gradient-to-br from-orange-50 to-orange-100 border-2 border-orange-200 hover:border-orange-300 transition-all hover:shadow-lg">
+                        <div class="card-body">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="badge badge-warning">Step {{ step.order }}</div>
+                                <div class="badge badge-outline">{{ step.formatted_duration }}</div>
+                            </div>
+                            
+                            <!-- Statistics Row -->
+                            <div class="flex items-center justify-between mb-3 text-xs">
+                                <div class="flex items-center gap-2">
+                                    <span class="badge badge-info badge-sm">{{ step.total_projects }} total</span>
+                                    {% if step.in_progress_count > 0 %}
+                                        <span class="badge badge-success badge-sm">{{ step.in_progress_count }} active</span>
+                                    {% endif %}
+                                    {% if step.pending_count > 0 %}
+                                        <span class="badge badge-warning badge-sm">{{ step.pending_count }} pending</span>
+                                    {% endif %}
+                                    {% if step.blocked_count > 0 %}
+                                        <span class="badge badge-error badge-sm">{{ step.blocked_count }} blocked</span>
+                                    {% endif %}
+                                </div>
+                                {% if step.subflow_count > 0 %}
+                                    <span class="text-base-content/60">
+                                        <i class="fas fa-sitemap mr-1"></i>{{ step.subflow_count }} sub-process{{ step.subflow_count|pluralize:"es" }}
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <h3 class="card-title text-xl">
+                                <i class="fas fa-clock text-orange-600"></i>
+                                {{ step.step_name }}
+                            </h3>
+                            <p class="text-sm text-base-content/70 mb-4">
+                                {{ step.description|default:"Release long lead items for procurement to avoid delays" }}
+                            </p>
+                            <div class="card-actions justify-end gap-2">
+                                <a href="{% url 'flow:step_detail' step.app_name %}" class="btn btn-warning btn-sm">
+                                    <i class="fas fa-folder-open mr-1"></i>
+                                    Open
+                                </a>
+                                <a href="{% url 'flow:step_detail_page' step.app_name %}" class="btn btn-outline btn-sm">
+                                    <i class="fas fa-info-circle mr-1"></i>
+                                    Details
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                {% elif step.app_name == 'drafting_queue' and step.app_name in user_accessible_apps %}
+                    <div class="card bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-200 hover:border-purple-300 transition-all hover:shadow-lg">
+                        <div class="card-body">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="badge badge-secondary">Step {{ step.order }}</div>
+                                <div class="badge badge-outline">{{ step.formatted_duration }}</div>
+                            </div>
+                            
+                            <!-- Statistics Row -->
+                            <div class="flex items-center justify-between mb-3 text-xs">
+                                <div class="flex items-center gap-2">
+                                    <span class="badge badge-info badge-sm">{{ step.total_projects }} total</span>
+                                    {% if step.in_progress_count > 0 %}
+                                        <span class="badge badge-success badge-sm">{{ step.in_progress_count }} active</span>
+                                    {% endif %}
+                                    {% if step.pending_count > 0 %}
+                                        <span class="badge badge-warning badge-sm">{{ step.pending_count }} pending</span>
+                                    {% endif %}
+                                    {% if step.blocked_count > 0 %}
+                                        <span class="badge badge-error badge-sm">{{ step.blocked_count }} blocked</span>
+                                    {% endif %}
+                                </div>
+                                {% if step.subflow_count > 0 %}
+                                    <span class="text-base-content/60">
+                                        <i class="fas fa-sitemap mr-1"></i>{{ step.subflow_count }} sub-process{{ step.subflow_count|pluralize:"es" }}
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <h3 class="card-title text-xl">
+                                <i class="fas fa-tasks text-purple-600"></i>
+                                {{ step.step_name }}
+                            </h3>
+                            <p class="text-sm text-base-content/70 mb-4">
+                                {{ step.description|default:"Queue items for detailed drafting and engineering work" }}
+                            </p>
+                            <div class="card-actions justify-end gap-2">
+                                <a href="{% url 'flow:step_detail' step.app_name %}" class="btn btn-secondary btn-sm">
+                                    <i class="fas fa-folder-open mr-1"></i>
+                                    Open
+                                </a>
+                                <a href="{% url 'flow:step_detail_page' step.app_name %}" class="btn btn-outline btn-sm">
+                                    <i class="fas fa-info-circle mr-1"></i>
+                                    Details
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                {% elif step.app_name == 'engineering_review_and_release' and step.app_name in user_accessible_apps %}
+                    <div class="card bg-gradient-to-br from-red-50 to-red-100 border-2 border-red-200 hover:border-red-300 transition-all hover:shadow-lg">
+                        <div class="card-body">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="badge badge-error">Step {{ step.order }}</div>
+                                <div class="badge badge-outline">{{ step.formatted_duration }}</div>
+                            </div>
+                            
+                            <!-- Statistics Row -->
+                            <div class="flex items-center justify-between mb-3 text-xs">
+                                <div class="flex items-center gap-2">
+                                    <span class="badge badge-info badge-sm">{{ step.total_projects }} total</span>
+                                    {% if step.in_progress_count > 0 %}
+                                        <span class="badge badge-success badge-sm">{{ step.in_progress_count }} active</span>
+                                    {% endif %}
+                                    {% if step.pending_count > 0 %}
+                                        <span class="badge badge-warning badge-sm">{{ step.pending_count }} pending</span>
+                                    {% endif %}
+                                    {% if step.blocked_count > 0 %}
+                                        <span class="badge badge-error badge-sm">{{ step.blocked_count }} blocked</span>
+                                    {% endif %}
+                                </div>
+                                {% if step.subflow_count > 0 %}
+                                    <span class="text-base-content/60">
+                                        <i class="fas fa-sitemap mr-1"></i>{{ step.subflow_count }} sub-process{{ step.subflow_count|pluralize:"es" }}
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <h3 class="card-title text-xl">
+                                <i class="fas fa-search text-red-600"></i>
+                                {{ step.step_name }}
+                            </h3>
+                            <p class="text-sm text-base-content/70 mb-4">
+                                {{ step.description|default:"Final engineering review and quality assurance before release" }}
+                            </p>
+                            <div class="card-actions justify-end gap-2">
+                                <a href="{% url 'flow:step_detail' step.app_name %}" class="btn btn-error btn-sm">
+                                    <i class="fas fa-folder-open mr-1"></i>
+                                    Open
+                                </a>
+                                <a href="{% url 'flow:step_detail_page' step.app_name %}" class="btn btn-outline btn-sm">
+                                    <i class="fas fa-info-circle mr-1"></i>
+                                    Details
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                {% elif step.app_name == 'release_to_purchasing' and step.app_name in user_accessible_apps %}
+                    <div class="card bg-gradient-to-br from-teal-50 to-teal-100 border-2 border-teal-200 hover:border-teal-300 transition-all hover:shadow-lg">
+                        <div class="card-body">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="badge badge-info">Step {{ step.order }}</div>
+                                <div class="badge badge-outline">{{ step.formatted_duration }}</div>
+                            </div>
+                            
+                            <!-- Statistics Row -->
+                            <div class="flex items-center justify-between mb-3 text-xs">
+                                <div class="flex items-center gap-2">
+                                    <span class="badge badge-info badge-sm">{{ step.total_projects }} total</span>
+                                    {% if step.in_progress_count > 0 %}
+                                        <span class="badge badge-success badge-sm">{{ step.in_progress_count }} active</span>
+                                    {% endif %}
+                                    {% if step.pending_count > 0 %}
+                                        <span class="badge badge-warning badge-sm">{{ step.pending_count }} pending</span>
+                                    {% endif %}
+                                    {% if step.blocked_count > 0 %}
+                                        <span class="badge badge-error badge-sm">{{ step.blocked_count }} blocked</span>
+                                    {% endif %}
+                                </div>
+                                {% if step.subflow_count > 0 %}
+                                    <span class="text-base-content/60">
+                                        <i class="fas fa-sitemap mr-1"></i>{{ step.subflow_count }} sub-process{{ step.subflow_count|pluralize:"es" }}
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <h3 class="card-title text-xl">
+                                <i class="fas fa-shopping-cart text-teal-600"></i>
+                                {{ step.step_name }}
+                            </h3>
+                            <p class="text-sm text-base-content/70 mb-4">
+                                {{ step.description|default:"Final release to purchasing department for procurement" }}
+                            </p>
+                            <div class="card-actions justify-end gap-2">
+                                <a href="{% url 'flow:step_detail' step.app_name %}" class="btn btn-info btn-sm">
+                                    <i class="fas fa-folder-open mr-1"></i>
+                                    Open
+                                </a>
+                                <a href="{% url 'flow:step_detail_page' step.app_name %}" class="btn btn-outline btn-sm">
+                                    <i class="fas fa-info-circle mr-1"></i>
+                                    Details
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    
+    <!-- Non-Flow Apps Container -->
+    <div class="mb-12">
+        <div class="flex items-center mb-6">
+            <div class="flex-1">
+                <h2 class="text-3xl font-bold">
+                    <i class="fas fa-tools text-secondary mr-3"></i>
+                    Support Tools
+                </h2>
+                <p class="text-base-content/70 mt-2">
+                    Additional tools and utilities for project management
+                </p>
+            </div>
+            <div class="badge badge-secondary badge-lg">
+                <i class="fas fa-cog mr-1"></i>
+                Independent
             </div>
         </div>
         
-        <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
-            <div class="card-body text-center">
-                <i class="fas fa-search text-4xl text-accent mb-2"></i>
-                <h3 class="card-title justify-center">Search</h3>
-                <p class="text-sm text-base-content/70">Find projects and files</p>
-            </div>
-        </div>
-        
-        <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
-            <div class="card-body text-center">
-                <i class="fas fa-cog text-4xl text-neutral mb-2"></i>
-                <h3 class="card-title justify-center">Settings</h3>
-                <p class="text-sm text-base-content/70">Configure your preferences</p>
-            </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <!-- Flow Calculator -->
+            {% if 'flow_calc' in user_accessible_apps %}
+                <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
+                    <div class="card-body text-center">
+                        <i class="fas fa-calculator text-4xl text-info mb-3"></i>
+                        <h3 class="card-title justify-center">Flow Calculator</h3>
+                        <p class="text-sm text-base-content/70">Calculate project flows and critical paths</p>
+                        <div class="card-actions justify-center mt-4">
+                            <a href="{% url 'flow_calc:dashboard' %}" class="btn btn-info btn-sm">Access</a>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+            
+            <!-- Account Management -->
+            {% if 'account' in user_accessible_apps %}
+                <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
+                    <div class="card-body text-center">
+                        <i class="fas fa-users text-4xl text-primary mb-3"></i>
+                        <h3 class="card-title justify-center">Account Management</h3>
+                        <p class="text-sm text-base-content/70">Manage user accounts and permissions</p>
+                        <div class="card-actions justify-center mt-4">
+                            <button class="btn btn-primary btn-sm">Access</button>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+            
+            <!-- Suggestions -->
+            {% if 'suggestions' in user_accessible_apps %}
+                <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
+                    <div class="card-body text-center">
+                        <i class="fas fa-lightbulb text-4xl text-warning mb-3"></i>
+                        <h3 class="card-title justify-center">Suggestions</h3>
+                        <p class="text-sm text-base-content/70">Submit and review improvement suggestions</p>
+                        <div class="card-actions justify-center mt-4">
+                            <button class="btn btn-warning btn-sm">Access</button>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+            
+            <!-- Messages -->
+            {% if 'user_messages' in user_accessible_apps %}
+                <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
+                    <div class="card-body text-center">
+                        <i class="fas fa-envelope text-4xl text-info mb-3"></i>
+                        <h3 class="card-title justify-center">Messages</h3>
+                        <p class="text-sm text-base-content/70">Internal messaging and notifications</p>
+                        <div class="card-actions justify-center mt-4">
+                            <button class="btn btn-info btn-sm">Access</button>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+            
+            <!-- Settings -->
+            {% if 'settings' in user_accessible_apps %}
+                <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
+                    <div class="card-body text-center">
+                        <i class="fas fa-cog text-4xl text-neutral mb-3"></i>
+                        <h3 class="card-title justify-center">Settings</h3>
+                        <p class="text-sm text-base-content/70">System configuration and preferences</p>
+                        <div class="card-actions justify-center mt-4">
+                            <button class="btn btn-neutral btn-sm">Access</button>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+            
+            <!-- Project Management -->
+            {% if 'project' in user_accessible_apps %}
+                <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
+                    <div class="card-body text-center">
+                        <i class="fas fa-project-diagram text-4xl text-success mb-3"></i>
+                        <h3 class="card-title justify-center">Project Management</h3>
+                        <p class="text-sm text-base-content/70">Manage projects and track progress</p>
+                        <div class="card-actions justify-center mt-4">
+                            <button class="btn btn-success btn-sm">Access</button>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+            
+            <!-- Product Configuration -->
+            {% if 'product_configuration' in user_accessible_apps %}
+                <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
+                    <div class="card-body text-center">
+                        <i class="fas fa-cogs text-4xl text-accent mb-3"></i>
+                        <h3 class="card-title justify-center">Product Configuration</h3>
+                        <p class="text-sm text-base-content/70">Configure product specifications</p>
+                        <div class="card-actions justify-center mt-4">
+                            <button class="btn btn-accent btn-sm">Access</button>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
         </div>
     </div>
 </div>

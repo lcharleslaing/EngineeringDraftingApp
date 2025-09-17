@@ -1,0 +1,229 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ flow_step.step_name }} - Detailed View{% endblock %}
+
+{% block content %}
+<div class="hero bg-base-200 py-8">
+    <div class="hero-content text-center">
+        <div class="max-w-4xl">
+            <h1 class="text-4xl font-bold mb-4">{{ flow_step.step_name }}</h1>
+            <p class="text-lg mb-6">{{ flow_step.description }}</p>
+            <div class="flex justify-center gap-4">
+                <div class="badge badge-primary badge-lg">
+                    <i class="fas fa-clock mr-1"></i>
+                    {{ flow_step.formatted_duration }}
+                </div>
+                <div class="badge badge-secondary badge-lg">
+                    <i class="fas fa-list mr-1"></i>
+                    {{ subflows.count }} Sub-Process{{ subflows.count|pluralize:"es" }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container mx-auto px-4 py-8">
+    <!-- Statistics Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="stat bg-base-100 shadow rounded-lg">
+            <div class="stat-figure text-primary">
+                <i class="fas fa-project-diagram text-2xl"></i>
+            </div>
+            <div class="stat-title">Total Projects</div>
+            <div class="stat-value text-primary">{{ total_projects }}</div>
+        </div>
+        
+        <div class="stat bg-base-100 shadow rounded-lg">
+            <div class="stat-figure text-info">
+                <i class="fas fa-play-circle text-2xl"></i>
+            </div>
+            <div class="stat-title">In Progress</div>
+            <div class="stat-value text-info">{{ in_progress_count }}</div>
+        </div>
+        
+        <div class="stat bg-base-100 shadow rounded-lg">
+            <div class="stat-figure text-warning">
+                <i class="fas fa-pause-circle text-2xl"></i>
+            </div>
+            <div class="stat-title">Pending</div>
+            <div class="stat-value text-warning">{{ pending_count }}</div>
+        </div>
+        
+        <div class="stat bg-base-100 shadow rounded-lg">
+            <div class="stat-figure text-success">
+                <i class="fas fa-check-circle text-2xl"></i>
+            </div>
+            <div class="stat-title">Completed</div>
+            <div class="stat-value text-success">{{ completed_count }}</div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Current Projects -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title text-2xl mb-4">
+                    <i class="fas fa-tasks text-primary"></i>
+                    Current Projects
+                </h2>
+                
+                {% if project_steps %}
+                    <div class="space-y-4">
+                        {% for project_step in project_steps %}
+                        <div class="card bg-base-200 shadow-sm">
+                            <div class="card-body p-4">
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <h3 class="font-semibold text-lg">{{ project_step.project.name }}</h3>
+                                        <p class="text-sm text-base-content/70">{{ project_step.project.description|truncatechars:100 }}</p>
+                                        <div class="flex items-center gap-2 mt-2">
+                                            <span class="badge badge-{{ project_step.status|default:'secondary' }}">
+                                                {{ project_step.get_status_display }}
+                                            </span>
+                                            {% if project_step.assigned_to %}
+                                                <span class="text-sm text-base-content/70">
+                                                    <i class="fas fa-user mr-1"></i>
+                                                    {{ project_step.assigned_to.get_full_name|default:project_step.assigned_to.username }}
+                                                </span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="text-right">
+                                        {% if project_step.target_completion_date %}
+                                            <div class="text-sm text-base-content/70">
+                                                Due: {{ project_step.target_completion_date|date:"M d, Y" }}
+                                            </div>
+                                        {% endif %}
+                                        {% if project_step.is_overdue %}
+                                            <div class="badge badge-error">Overdue</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                <div class="card-actions justify-end mt-4">
+                                    <a href="{% url 'flow:project_detail' project_step.project.id %}" 
+                                       class="btn btn-sm btn-outline">
+                                        <i class="fas fa-eye mr-1"></i>
+                                        View Details
+                                    </a>
+                                    {% if project_step.can_start and project_step.status == 'pending' %}
+                                        <a href="{% url 'flow:start_project_step' project_step.id %}" 
+                                           class="btn btn-sm btn-primary">
+                                            <i class="fas fa-play mr-1"></i>
+                                            Start
+                                        </a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-8">
+                        <i class="fas fa-inbox text-4xl text-base-content/30 mb-4"></i>
+                        <p class="text-base-content/70">No projects currently at this step</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Sub-Processes -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title text-2xl mb-4">
+                    <i class="fas fa-sitemap text-secondary"></i>
+                    Sub-Processes
+                </h2>
+                
+                {% if subflows %}
+                    <div class="space-y-4">
+                        {% for subflow in subflows %}
+                        <div class="collapse collapse-arrow bg-base-200">
+                            <input type="checkbox" />
+                            <div class="collapse-title text-lg font-medium">
+                                {{ subflow.name }}
+                                <span class="badge badge-outline ml-2">{{ subflow.steps.count }} steps</span>
+                            </div>
+                            <div class="collapse-content">
+                                <div class="space-y-2 mt-4">
+                                    {% for step in subflow.steps.all %}
+                                    <div class="flex justify-between items-center p-2 bg-base-100 rounded">
+                                        <div>
+                                            <div class="font-medium">{{ step.step_name }}</div>
+                                            <div class="text-sm text-base-content/70">{{ step.description }}</div>
+                                        </div>
+                                        <div class="badge badge-outline">
+                                            {{ step.estimated_duration }}
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-8">
+                        <i class="fas fa-sitemap text-4xl text-base-content/30 mb-4"></i>
+                        <p class="text-base-content/70">No sub-processes defined for this step</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Completed Projects (if any) -->
+    {% if completed_projects %}
+    <div class="card bg-base-100 shadow-xl mt-8">
+        <div class="card-body">
+            <h2 class="card-title text-2xl mb-4">
+                <i class="fas fa-check-circle text-success"></i>
+                Recently Completed
+            </h2>
+            
+            <div class="overflow-x-auto">
+                <table class="table table-zebra w-full">
+                    <thead>
+                        <tr>
+                            <th>Project Name</th>
+                            <th>Completed By</th>
+                            <th>Completed Date</th>
+                            <th>Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for project_step in completed_projects %}
+                        <tr>
+                            <td>
+                                <div class="font-medium">{{ project_step.project.name }}</div>
+                                <div class="text-sm text-base-content/70">{{ project_step.project.description|truncatechars:50 }}</div>
+                            </td>
+                            <td>
+                                {% if project_step.assigned_to %}
+                                    {{ project_step.assigned_to.get_full_name|default:project_step.assigned_to.username }}
+                                {% else %}
+                                    <span class="text-base-content/50">Unassigned</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ project_step.actual_completion_date|date:"M d, Y" }}</td>
+                            <td>
+                                {% if project_step.start_date and project_step.actual_completion_date %}
+                                    {{ project_step.actual_completion_date|timeuntil:project_step.start_date }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Step-Specific Content -->
+    {% block step_specific_content %}
+    {% endblock %}
+</div>
+{% endblock %}

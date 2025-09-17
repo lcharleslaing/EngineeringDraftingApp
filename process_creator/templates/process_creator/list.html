@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block title %}Process Creator{% endblock %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-bold">Process Creator</h1>
+  <a href="{% url 'process_creator:create' %}" class="btn btn-primary">New Process</a>
+  </div>
+
+<div class="grid gap-4">
+  {% for p in processes %}
+    <div class="card bg-base-200">
+      <div class="card-body">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="card-title">{{ p.name }}</h2>
+            <p class="opacity-70">Updated {{ p.updated_at|date:'Y-m-d H:i' }}</p>
+          </div>
+          <div class="flex gap-2">
+            <a class="btn btn-sm" href="{% url 'process_creator:edit' p.id %}">Edit</a>
+            <a class="btn btn-sm" href="{% url 'process_creator:print' p.id %}" target="_blank">Print</a>
+            <a class="btn btn-sm" href="{% url 'process_creator:copy' p.id %}">Copy</a>
+            <a class="btn btn-sm btn-error" href="{% url 'process_creator:delete' p.id %}">Delete</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% empty %}
+    <div class="alert">No processes yet. Create one to get started.</div>
+  {% endfor %}
+</div>
+{% endblock %}
+
+

@@ -1,0 +1,42 @@
+{% extends "flow_calc/base.html" %}
+
+{% block title %}Delete Project{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 600px; margin: 0 auto; padding: 2rem;">
+    <div class="flow-card">
+        <div class="flow-header" style="background: #fef2f2; border-bottom-color: #fecaca;">
+            <h1 class="flow-title" style="color: #dc2626;">
+                <i class="fas fa-exclamation-triangle"></i>
+                Delete Project
+            </h1>
+        </div>
+        <div class="flow-content">
+            <p class="text-gray-600 mb-4">
+                Are you sure you want to delete the project <strong>"{{ object.name }}"</strong>?
+            </p>
+            
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                <h3 class="font-semibold text-yellow-800 mb-2">Warning</h3>
+                <p class="text-yellow-700 text-sm">
+                    This action will also delete all associated steps and calculations. This cannot be undone.
+                </p>
+            </div>
+            
+            <div class="flex gap-2">
+                <form method="post" class="inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-flow danger">
+                        <i class="fas fa-trash"></i>
+                        Yes, Delete Project
+                    </button>
+                </form>
+                <a href="{% url 'flow_calc:project_detail' object.pk %}" class="btn-flow secondary">
+                    <i class="fas fa-times"></i>
+                    Cancel
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

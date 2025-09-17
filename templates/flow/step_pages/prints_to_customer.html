@@ -1,0 +1,47 @@
+{% extends 'flow/step_pages/base_step_detail.html' %}
+
+{% block step_specific_content %}
+<!-- Prints to Customer Specific Content -->
+<div class="card bg-base-100 shadow-xl mt-8">
+    <div class="card-body">
+        <h2 class="card-title text-2xl mb-4">
+            <i class="fas fa-truck text-primary"></i>
+            Customer Delivery Process
+        </h2>
+        
+        <div class="prose max-w-none">
+            <h3>Delivery Preparation</h3>
+            <ul>
+                <li>Format prints for customer requirements</li>
+                <li>Package prints securely for transport</li>
+                <li>Include all necessary documentation</li>
+                <li>Prepare delivery confirmation forms</li>
+            </ul>
+            
+            <h3>Quality Control</h3>
+            <ul>
+                <li>Final print quality verification</li>
+                <li>Completeness check against project requirements</li>
+                <li>Documentation accuracy review</li>
+                <li>Customer-specific formatting validation</li>
+            </ul>
+            
+            <h3>Delivery Methods</h3>
+            <ul>
+                <li>Digital delivery via secure portal</li>
+                <li>Physical delivery via courier</li>
+                <li>Hand delivery for critical projects</li>
+                <li>Email delivery for standard projects</li>
+            </ul>
+            
+            <h3>Customer Communication</h3>
+            <ul>
+                <li>Delivery notification and tracking</li>
+                <li>Receipt confirmation process</li>
+                <li>Customer feedback collection</li>
+                <li>Follow-up for any issues or questions</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

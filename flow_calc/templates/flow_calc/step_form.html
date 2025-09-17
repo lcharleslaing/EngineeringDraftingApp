@@ -1,0 +1,112 @@
+{% extends "flow_calc/base.html" %}
+{% load static %}
+
+{% block title %}{% if object %}Edit Step{% else %}Add Step{% endif %}{% endblock %}
+
+{% block content %}
+<div class="hero bg-base-200 py-8">
+    <div class="hero-content text-center">
+        <div class="max-w-2xl">
+            <h1 class="text-3xl font-bold mb-4">
+                {% if object %}
+                    <i class="fas fa-edit text-primary mr-2"></i>Edit Step
+                {% else %}
+                    <i class="fas fa-plus-circle text-primary mr-2"></i>Add New Step
+                {% endif %}
+            </h1>
+            <p class="text-lg mb-6">Configure step details and dependencies</p>
+        </div>
+    </div>
+</div>
+
+<div class="container mx-auto px-4 py-8">
+    <div class="card bg-base-100 shadow-xl max-w-4xl mx-auto">
+        <div class="card-body">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+                
+                <!-- Step Name -->
+                <div class="form-control">
+                    <label class="label" for="{{ form.name.id_for_label }}">
+                        <span class="label-text font-semibold">
+                            Step Name <span class="text-error">*</span>
+                        </span>
+                    </label>
+                    {{ form.name }}
+                    {% if form.name.errors %}
+                        <label class="label">
+                            <span class="label-text-alt text-error">{{ form.name.errors.0 }}</span>
+                        </label>
+                    {% endif %}
+                </div>
+
+                <!-- Description -->
+                <div class="form-control">
+                    <label class="label" for="{{ form.description.id_for_label }}">
+                        <span class="label-text font-semibold">Description</span>
+                    </label>
+                    {{ form.description }}
+                    {% if form.description.errors %}
+                        <label class="label">
+                            <span class="label-text-alt text-error">{{ form.description.errors.0 }}</span>
+                        </label>
+                    {% endif %}
+                </div>
+
+                <!-- Duration -->
+                <div class="form-control">
+                    <label class="label" for="{{ form.duration_days.id_for_label }}">
+                        <span class="label-text font-semibold">
+                            Duration (Days) <span class="text-error">*</span>
+                        </span>
+                    </label>
+                    {{ form.duration_days }}
+                    {% if form.duration_days.errors %}
+                        <label class="label">
+                            <span class="label-text-alt text-error">{{ form.duration_days.errors.0 }}</span>
+                        </label>
+                    {% endif %}
+                </div>
+
+                <!-- Dependencies -->
+                <div class="form-control">
+                    <label class="label" for="{{ form.dependencies.id_for_label }}">
+                        <span class="label-text font-semibold">Dependencies</span>
+                    </label>
+                    <div class="card bg-base-200 max-h-40 overflow-y-auto">
+                        <div class="card-body p-4">
+                            {% for choice in form.dependencies %}
+                                <label class="flex items-center gap-2 p-2 hover:bg-base-300 rounded">
+                                    {{ choice.tag }}
+                                    <span class="text-sm">{{ choice.choice_label }}</span>
+                                </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% if form.dependencies.errors %}
+                        <label class="label">
+                            <span class="label-text-alt text-error">{{ form.dependencies.errors.0 }}</span>
+                        </label>
+                    {% endif %}
+                    <label class="label">
+                        <span class="label-text-alt">Select steps that must complete before this step starts</span>
+                    </label>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="divider"></div>
+                <div class="flex gap-3 justify-end">
+                    <a href="{% if object %}{% url 'flow_calc:project_detail' object.project.pk %}{% else %}{% url 'flow_calc:project_detail' project.pk %}{% endif %}" class="btn btn-outline">
+                        <i class="fas fa-arrow-left mr-2"></i>
+                        Back to Project
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save mr-2"></i>
+                        {% if object %}Update Step{% else %}Add Step{% endif %}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

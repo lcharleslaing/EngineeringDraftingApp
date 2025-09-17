@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+
+{% block title %}Access Denied - Drafting Engineering Flow{% endblock %}
+
+{% block content %}
+<div class="hero min-h-screen bg-base-200">
+    <div class="hero-content text-center">
+        <div class="max-w-md">
+            <div class="text-6xl mb-4">
+                {% if reason == 'disabled' %}
+                    <i class="fas fa-ban text-warning"></i>
+                {% elif reason == 'permission_denied' %}
+                    <i class="fas fa-lock text-error"></i>
+                {% elif reason == 'not_authenticated' %}
+                    <i class="fas fa-user-times text-info"></i>
+                {% elif reason == 'role_required' %}
+                    <i class="fas fa-user-shield text-warning"></i>
+                {% else %}
+                    <i class="fas fa-exclamation-triangle text-warning"></i>
+                {% endif %}
+            </div>
+            
+            <h1 class="text-4xl font-bold mb-4">
+                {% if reason == 'disabled' %}
+                    Module Disabled
+                {% elif reason == 'permission_denied' %}
+                    Access Denied
+                {% elif reason == 'not_authenticated' %}
+                    Authentication Required
+                {% elif reason == 'role_required' %}
+                    Role Required
+                {% else %}
+                    Access Restricted
+                {% endif %}
+            </h1>
+            
+            <div class="alert alert-warning mb-6">
+                <div>
+                    {% if reason == 'disabled' %}
+                        <i class="fas fa-info-circle"></i>
+                        <span>The <strong>{{ app_name|title }}</strong> module is currently disabled by the administrator.</span>
+                    {% elif reason == 'permission_denied' %}
+                        <i class="fas fa-lock"></i>
+                        <span>You don't have permission to access the <strong>{{ app_name|title }}</strong> module.</span>
+                    {% elif reason == 'not_authenticated' %}
+                        <i class="fas fa-sign-in-alt"></i>
+                        <span>You must be logged in to access this page.</span>
+                    {% elif reason == 'role_required' %}
+                        <i class="fas fa-user-shield"></i>
+                        <span>You need the <strong>{{ role_name|default:role_names|join:", " }}</strong> role to access this page.</span>
+                    {% else %}
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span>Access to this resource is restricted.</span>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title justify-center mb-4">What can you do?</h2>
+                    <ul class="text-left space-y-2">
+                        {% if reason == 'disabled' %}
+                            <li><i class="fas fa-arrow-right text-primary mr-2"></i>Contact your administrator to enable this module</li>
+                            <li><i class="fas fa-arrow-right text-primary mr-2"></i>Check back later as modules may be temporarily disabled</li>
+                        {% elif reason == 'permission_denied' %}
+                            <li><i class="fas fa-arrow-right text-primary mr-2"></i>Contact your administrator to request access</li>
+                            <li><i class="fas fa-arrow-right text-primary mr-2"></i>Check if you have the correct role assigned</li>
+                        {% elif reason == 'not_authenticated' %}
+                            <li><i class="fas fa-arrow-right text-primary mr-2"></i>Log in to your account</li>
+                            <li><i class="fas fa-arrow-right text-primary mr-2"></i>Create an account if you don't have one</li>
+                        {% elif reason == 'role_required' %}
+                            <li><i class="fas fa-arrow-right text-primary mr-2"></i>Contact your administrator to assign the required role</li>
+                            <li><i class="fas fa-arrow-right text-primary mr-2"></i>Check your current role assignments</li>
+                        {% else %}
+                            <li><i class="fas fa-arrow-right text-primary mr-2"></i>Contact your administrator for assistance</li>
+                            <li><i class="fas fa-arrow-right text-primary mr-2"></i>Check your permissions and role assignments</li>
+                        {% endif %}
+                        <li><i class="fas fa-arrow-right text-primary mr-2"></i>Return to the dashboard</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="card-actions justify-center mt-6">
+                <a href="{% url 'home' %}" class="btn btn-primary">
+                    <i class="fas fa-home mr-2"></i>
+                    Return to Dashboard
+                </a>
+                {% if not user.is_authenticated %}
+                    <a href="{% url 'admin:login' %}" class="btn btn-secondary">
+                        <i class="fas fa-sign-in-alt mr-2"></i>
+                        Log In
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

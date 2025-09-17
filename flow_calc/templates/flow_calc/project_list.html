@@ -1,0 +1,137 @@
+{% extends "flow_calc/base.html" %}
+{% load static %}
+
+{% block title %}Flow Projects{% endblock %}
+
+{% block content %}
+<div class="hero bg-base-200 py-8">
+    <div class="hero-content text-center">
+        <div class="max-w-4xl">
+            <h1 class="text-4xl font-bold mb-4">
+                <i class="fas fa-project-diagram text-primary mr-2"></i>Flow Projects
+            </h1>
+            <p class="text-lg mb-6">Manage your project flows and critical path calculations</p>
+            <a href="{% url 'flow_calc:project_create' %}" class="btn btn-primary">
+                <i class="fas fa-plus mr-2"></i>
+                New Project
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="container mx-auto px-4 py-8">
+    <!-- Projects List -->
+    {% if projects %}
+        <div class="space-y-6">
+            {% for project in projects %}
+                <div class="card bg-base-100 shadow-xl">
+                    <div class="card-body">
+                        <div class="flex justify-between items-start">
+                            <div class="flex-1">
+                                <h2 class="card-title text-2xl">
+                                    <a href="{% url 'flow_calc:project_detail' project.pk %}" class="link link-primary">
+                                        {{ project.name }}
+                                    </a>
+                                </h2>
+                                <div class="flex items-center gap-2 mt-2">
+                                    {% if project.is_delayed %}
+                                        <span class="badge badge-error">Delayed ({{ project.delay_days }} days)</span>
+                                    {% else %}
+                                        <span class="badge badge-success">On Time</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="flex gap-2">
+                                <a href="{% url 'flow_calc:project_update' project.pk %}" class="btn btn-outline btn-sm">
+                                    <i class="fas fa-edit mr-1"></i>
+                                    Edit
+                                </a>
+                                <a href="{% url 'flow_calc:project_delete' project.pk %}" class="btn btn-error btn-sm">
+                                    <i class="fas fa-trash mr-1"></i>
+                                    Delete
+                                </a>
+                            </div>
+                        </div>
+                        
+                        {% if project.description %}
+                            <p class="text-base-content/70 mt-3">{{ project.description|truncatewords:30 }}</p>
+                        {% endif %}
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                            <div class="stat bg-base-200 rounded-lg">
+                                <div class="stat-title">Start Date</div>
+                                <div class="stat-value text-lg">{{ project.start_date|date:"M d, Y" }}</div>
+                            </div>
+                            <div class="stat bg-base-200 rounded-lg">
+                                <div class="stat-title">Planned End</div>
+                                <div class="stat-value text-lg">{{ project.end_date|date:"M d, Y" }}</div>
+                            </div>
+                            <div class="stat bg-base-200 rounded-lg">
+                                <div class="stat-title">Calculated End</div>
+                                <div class="stat-value text-lg">{{ project.calculated_end_date|date:"M d, Y" }}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center justify-between mt-4 pt-4 border-t border-base-300">
+                            <div class="badge badge-info">
+                                <i class="fas fa-clock mr-1"></i>
+                                {{ project.duration_days }} days
+                            </div>
+                            <div class="text-sm text-base-content/60">
+                                Created: {{ project.created_at|date:"M d, Y" }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+
+        <!-- Pagination -->
+        {% if is_paginated %}
+            <div class="card bg-base-100 shadow-xl mt-8">
+                <div class="card-body">
+                    <div class="flex justify-center">
+                        <div class="btn-group">
+                            {% if page_obj.has_previous %}
+                                <a href="?page=1" class="btn btn-outline">
+                                    <i class="fas fa-angle-double-left"></i>
+                                </a>
+                                <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-outline">
+                                    <i class="fas fa-angle-left"></i>
+                                    Previous
+                                </a>
+                            {% endif %}
+                            
+                            <button class="btn btn-primary">
+                                Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                            </button>
+                            
+                            {% if page_obj.has_next %}
+                                <a href="?page={{ page_obj.next_page_number }}" class="btn btn-outline">
+                                    Next
+                                    <i class="fas fa-angle-right"></i>
+                                </a>
+                                <a href="?page={{ page_obj.paginator.num_pages }}" class="btn btn-outline">
+                                    <i class="fas fa-angle-double-right"></i>
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    {% else %}
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body text-center py-16">
+                <i class="fas fa-project-diagram text-6xl text-base-content/30 mb-4"></i>
+                <h3 class="text-2xl font-bold text-base-content/70 mb-2">No Projects Found</h3>
+                <p class="text-base-content/50 mb-6">Create your first flow project to get started with project flow calculations.</p>
+                <a href="{% url 'flow_calc:project_create' %}" class="btn btn-primary">
+                    <i class="fas fa-plus mr-2"></i>
+                    Create Your First Project
+                </a>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

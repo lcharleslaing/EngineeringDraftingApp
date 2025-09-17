@@ -1,0 +1,200 @@
+{% extends "flow_calc/base.html" %}
+{% load static %}
+
+{% block title %}{{ project.name }} - Flow Project{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 1200px; margin: 0 auto; padding: 2rem;">
+    <!-- Project Header -->
+    <div class="flow-card">
+        <div class="flow-header">
+            <h1 class="flow-title">{{ project.name }}</h1>
+            <div class="flex items-center gap-2">
+                {% if project.is_delayed %}
+                    <span class="status-badge delayed">Delayed ({{ project.delay_days }} days)</span>
+                {% else %}
+                    <span class="status-badge on-time">On Time</span>
+                {% endif %}
+                <a href="{% url 'flow_calc:project_update' project.pk %}" class="btn-flow secondary">
+                    <i class="fas fa-edit"></i>
+                    Edit
+                </a>
+            </div>
+        </div>
+        <div class="flow-content">
+            {% if project.description %}
+                <p class="text-gray-600 mb-4">{{ project.description }}</p>
+            {% endif %}
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <strong>Start Date:</strong><br>
+                    {{ project.start_date|date:"M d, Y" }}
+                </div>
+                <div>
+                    <strong>Planned End:</strong><br>
+                    {{ project.end_date|date:"M d, Y" }}
+                </div>
+                <div>
+                    <strong>Calculated End:</strong><br>
+                    {{ project.calculated_end_date|date:"M d, Y" }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Calculation Summary -->
+    <div class="flow-card">
+        <div class="flow-header">
+            <h2 class="flow-title">Project Summary</h2>
+            <form method="post" action="{% url 'flow_calc:calculate' project.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn-flow success">
+                    <i class="fas fa-calculator"></i>
+                    Recalculate
+                </button>
+            </form>
+        </div>
+        <div class="flow-content">
+            <div class="calculation-summary">
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <div class="summary-value">{{ project.duration_days }}</div>
+                        <div class="summary-label">Planned Duration (days)</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-value">{{ project.calculated_end_date|timesince:project.start_date }}</div>
+                        <div class="summary-label">Calculated Duration</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-value">{{ steps|length }}</div>
+                        <div class="summary-label">Total Steps</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-value">{{ critical_path_steps|length }}</div>
+                        <div class="summary-label">Critical Path Steps</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Steps Timeline -->
+    <div class="flow-card">
+        <div class="flow-header">
+            <h2 class="flow-title">Project Steps</h2>
+            <div class="flex gap-2">
+                <a href="{% url 'flow_calc:step_quick_add' project.pk %}" class="btn-flow secondary">
+                    <i class="fas fa-plus"></i>
+                    Quick Add
+                </a>
+                <a href="{% url 'flow_calc:step_create' project.pk %}" class="btn-flow">
+                    <i class="fas fa-plus"></i>
+                    Add Step
+                </a>
+            </div>
+        </div>
+        <div class="flow-content">
+            {% if steps %}
+                <div class="timeline">
+                    {% for step in steps %}
+                        <div class="timeline-item {% if step.is_critical_path %}critical{% endif %}">
+                            <div class="step-card {% if step.is_critical_path %}critical{% endif %}">
+                                <div class="step-header">
+                                    <h3 class="step-name">{{ step.name }}</h3>
+                                    <div class="flex items-center gap-2">
+                                        {% if step.is_critical_path %}
+                                            <span class="status-badge delayed">Critical Path</span>
+                                        {% endif %}
+                                        <div class="flex gap-1">
+                                            <a href="{% url 'flow_calc:step_update' step.pk %}" class="btn-flow secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            <a href="{% url 'flow_calc:step_delete' step.pk %}" class="btn-flow danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">
+                                                <i class="fas fa-trash"></i>
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                {% if step.description %}
+                                    <p class="text-gray-600 mb-2">{{ step.description }}</p>
+                                {% endif %}
+                                
+                                <div class="step-dates">
+                                    <strong>Start:</strong> {{ step.calculated_start_date|date:"M d, Y" }} | 
+                                    <strong>End:</strong> {{ step.calculated_end_date|date:"M d, Y" }} | 
+                                    <strong>Duration:</strong> {{ step.duration_days }} days
+                                </div>
+                                
+                                <div class="step-duration">
+                                    <strong>Slack Time:</strong> 
+                                    <span class="step-slack {% if step.slack_days > 0 %}positive{% elif step.slack_days == 0 %}zero{% else %}negative{% endif %}">
+                                        {{ step.slack_days }} days
+                                    </span>
+                                </div>
+                                
+                                {% if step.dependencies.exists %}
+                                    <div class="dependency-list">
+                                        <strong>Dependencies:</strong>
+                                        {% for dep in step.dependencies.all %}
+                                            <span class="dependency-item">{{ dep.name }}</span>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-8">
+                    <i class="fas fa-tasks text-6xl text-gray-300 mb-4"></i>
+                    <h3 class="text-xl font-semibold text-gray-600 mb-2">No Steps Yet</h3>
+                    <p class="text-gray-500 mb-4">Add steps to your project to start flow calculations.</p>
+                    <div class="flex gap-2 justify-center">
+                        <a href="{% url 'flow_calc:step_create' project.pk %}" class="btn-flow">
+                            <i class="fas fa-plus"></i>
+                            Add Step
+                        </a>
+                        <a href="{% url 'flow_calc:step_quick_add' project.pk %}" class="btn-flow secondary">
+                            <i class="fas fa-plus"></i>
+                            Quick Add
+                        </a>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Critical Path Analysis -->
+    {% if critical_path_steps %}
+        <div class="flow-card">
+            <div class="flow-header" style="background: #fef2f2; border-bottom-color: #fecaca;">
+                <h2 class="flow-title" style="color: #dc2626;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Critical Path Analysis
+                </h2>
+            </div>
+            <div class="flow-content">
+                <p class="text-gray-600 mb-4">
+                    The following steps are on the critical path and directly affect the project end date:
+                </p>
+                <div class="space-y-2">
+                    {% for step in critical_path_steps %}
+                        <div class="step-card critical">
+                            <div class="step-header">
+                                <h3 class="step-name">{{ step.name }}</h3>
+                                <span class="status-badge delayed">Critical</span>
+                            </div>
+                            <div class="step-dates">
+                                <strong>Duration:</strong> {{ step.duration_days }} days | 
+                                <strong>Ends:</strong> {{ step.calculated_end_date|date:"M d, Y" }}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

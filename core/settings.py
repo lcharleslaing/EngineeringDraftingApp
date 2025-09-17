@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -23,9 +24,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-zc$6-fc$$91u+91#-r@f0gkp(_0dh4)*#g$-f*n_0+p&a+%exs'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DJANGO_DEBUG', '1') == '1'
 
-ALLOWED_HOSTS = []
+_env_allowed = os.environ.get('DJANGO_ALLOWED_HOSTS')
+if _env_allowed:
+    ALLOWED_HOSTS = [h.strip() for h in _env_allowed.split(',') if h.strip()]
+else:
+    # In dev, allow common hosts; you can still override via env
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'testserver']
 
 
 # Application definition
@@ -39,6 +45,22 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'main',
     'theme',
+    'rbac',
+    'flow',
+    'flow_calc',
+    'settings',
+    'account',
+    'project',
+    'approval_prints',
+    'product_configuration',
+    'user_messages',
+    'suggestions',
+    'prints_to_customer',
+    'long_lead_release',
+    'drafting_queue',
+    'engineering_review_and_release',
+    'release_to_purchasing',
+    'process_creator',
 ]
 
 MIDDLEWARE = [
@@ -49,6 +71,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'rbac.middleware.RBACMiddleware',
 ]
 
 ROOT_URLCONF = 'core.urls'
@@ -65,6 +88,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'theme.context_processors.theme_context',
+                'rbac.context_processors.rbac_context',
             ],
         },
     },
@@ -132,3 +156,20 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Sessions
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 14  # 2 weeks
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_EXPIRE_AT_BROWSER_CLOSE = os.environ.get('DJANGO_SESSION_EXPIRE_AT_BROWSER_CLOSE', '0') == '1'
+SESSION_COOKIE_SECURE = os.environ.get('DJANGO_SESSION_COOKIE_SECURE', '0') == '1'
+SESSION_COOKIE_SAMESITE = os.environ.get('DJANGO_SESSION_COOKIE_SAMESITE', 'Lax')
+
+# CSRF/cookies security toggles
+CSRF_COOKIE_SECURE = os.environ.get('DJANGO_CSRF_COOKIE_SECURE', '0') == '1'
+SECURE_SSL_REDIRECT = os.environ.get('DJANGO_SECURE_SSL_REDIRECT', '0') == '1'
+
+# CSRF trusted origins can be provided as a comma-separated list of scheme+host[:port]
+_env_csrf = os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS')
+if _env_csrf:
+    CSRF_TRUSTED_ORIGINS = [o.strip() for o in _env_csrf.split(',') if o.strip()]

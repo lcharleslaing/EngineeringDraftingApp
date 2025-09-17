@@ -1,0 +1,160 @@
+{% extends 'base.html' %}
+{% block title %}Edit: {{ process.name }}{% endblock %}
+{% block content %}
+<div class="sticky top-0 z-10 bg-base-100/90 backdrop-blur border-b border-base-200 mb-6">
+  <div class="max-w-7xl mx-auto px-1 sm:px-2 lg:px-4 py-3 flex items-center gap-3">
+    <input id="process-name" class="input input-bordered w-full" value="{{ process.name }}" placeholder="Process name" required />
+    <div class="ml-auto flex gap-2">
+      <a class="btn btn-outline" href="{% url 'process_creator:list' %}">Back</a>
+      <a class="btn btn-outline" href="{% url 'process_creator:print' process.id %}" target="_blank">Print</a>
+      <button id="copy-btn" class="btn btn-primary" data-copy-url="{% url 'process_creator:copy' process.id %}">Copy</button>
+    </div>
+  </div>
+  </div>
+
+<div class="max-w-7xl mx-auto px-1 sm:px-2 lg:px-4">
+  <div class="grid grid-cols-12 gap-6">
+    <div class="col-span-12">
+      <h2 class="font-semibold mb-2">Description</h2>
+      <textarea id="process-description" class="textarea textarea-bordered w-full min-h-28" placeholder="Describe the process">{{ process.description }}</textarea>
+    </div>
+
+    <div class="col-span-12">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="font-semibold">Steps</h2>
+        <button id="add-step" class="btn btn-primary btn-sm">Add step</button>
+      </div>
+      <div id="steps" class="space-y-3">
+        {% for step in process.steps.all %}
+          <div class="card bg-base-200 shadow-sm" data-id="{{ step.id }}">
+            <div class="card-body p-4">
+              <div class="flex items-center gap-3">
+                <span class="drag cursor-grab text-base-300" title="Drag to reorder">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4h4v2h-4V4zm0 14h4v2h-4v-2zM4 10h2v4H4v-4zm14 0h2v4h-2v-4z"/></svg>
+                </span>
+                <input class="step-title input input-sm input-bordered flex-1" value="{{ step.title }}" required />
+                <button class="btn btn-sm btn-error step-delete">Delete</button>
+              </div>
+              <textarea class="step-details textarea textarea-bordered mt-3 h-24" placeholder="Details">{{ step.details }}</textarea>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="col-span-12">
+      <h2 class="font-semibold mb-2">Notes</h2>
+      <textarea id="process-notes" class="textarea textarea-bordered w-full min-h-40" placeholder="Any notes">{{ process.notes }}</textarea>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const processId = {{ process.id }};
+const base = '/process-creator/' + processId + '/';
+
+async function post(url, data){
+  const form = new URLSearchParams();
+  for(const [k,v] of Object.entries(data||{})) form.append(k,v);
+  const res = await fetch(url, {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}, body:form});
+  return res.json();
+}
+
+function getCookie(name){
+  const value = `; ${document.cookie}`.split(`; ${name}=`).pop();
+  return value ? value.split(';').shift() : '';
+}
+
+// Autosave process fields
+function debouncedSave(){
+  clearTimeout(window._saveT); window._saveT = setTimeout(() => {
+    post(base + 'update/', {
+      description: document.getElementById('process-description').value,
+      notes: document.getElementById('process-notes').value,
+    });
+  }, 400);
+}
+
+document.getElementById('process-description').addEventListener('input', debouncedSave);
+document.getElementById('process-notes').addEventListener('input', debouncedSave);
+
+// Name change via simple submit to update endpoint
+document.getElementById('process-name').addEventListener('change', async (e)=>{
+  await fetch(base + 'update/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}, body:new URLSearchParams({name:e.target.value})});
+});
+
+// Add step
+document.getElementById('add-step').addEventListener('click', async ()=>{
+  const data = await post(base + 'steps/add/', {title:'New Step'});
+  location.reload();
+});
+
+// Update step fields
+document.querySelectorAll('#steps .card').forEach(card=>{
+  const id = card.dataset.id;
+  card.querySelector('.step-title').addEventListener('change', e=>{
+    post(base + 'steps/' + id + '/update/', {title:e.target.value});
+  });
+  card.querySelector('.step-details').addEventListener('input', ()=>{
+    clearTimeout(card._t); card._t = setTimeout(()=>{
+      post(base + 'steps/' + id + '/update/', {details:card.querySelector('.step-details').value});
+    }, 400);
+  });
+  card.querySelector('.step-delete').addEventListener('click', ()=>{
+    post(base + 'steps/' + id + '/delete/').then(()=>location.reload());
+  });
+});
+
+// Drag and drop ordering
+let dragEl = null;
+document.querySelectorAll('#steps .card .drag').forEach(handle=>{
+  const card = handle.closest('.card');
+  card.draggable = true;
+  card.addEventListener('dragstart', ()=>{ dragEl = card; card.classList.add('opacity-50'); });
+  card.addEventListener('dragend', ()=>{ card.classList.remove('opacity-50'); dragEl = null; saveOrder(); });
+});
+
+document.getElementById('steps').addEventListener('dragover', (e)=>{
+  e.preventDefault();
+  const container = e.currentTarget;
+  const afterEl = Array.from(container.querySelectorAll('.card')).find(el=>{
+    const rect = el.getBoundingClientRect();
+    return e.clientY < rect.top + rect.height/2;
+  });
+  if (!afterEl) container.appendChild(dragEl); else container.insertBefore(dragEl, afterEl);
+});
+
+function saveOrder(){
+  const ids = Array.from(document.querySelectorAll('#steps .card')).map(c=>c.dataset.id);
+  const form = new URLSearchParams(); ids.forEach(id=>form.append('order[]', id));
+  fetch(base + 'steps/reorder/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}, body:form});
+}
+
+// Copy markdown to clipboard
+document.getElementById('copy-btn').addEventListener('click', async (e)=>{
+  e.preventDefault();
+  const url = e.currentTarget.dataset.copyUrl;
+  try {
+    const res = await fetch(url);
+    const text = await res.text();
+    await navigator.clipboard.writeText(text);
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-top toast-end';
+    toast.innerHTML = '<div class="alert alert-success"><span>Copied Markdown to clipboard.</span></div>';
+    document.body.appendChild(toast);
+    setTimeout(()=>toast.remove(), 1500);
+  } catch(err) {
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-top toast-end';
+    toast.innerHTML = '<div class="alert alert-error"><span>Copy failed.</span></div>';
+    document.body.appendChild(toast);
+    setTimeout(()=>toast.remove(), 2000);
+  }
+});
+</script>
+{% endblock %}
+
+

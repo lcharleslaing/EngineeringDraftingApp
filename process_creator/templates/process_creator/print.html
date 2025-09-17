@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>{{ process.name }} - Print</title>
+  <link href="https://cdn.tailwindcss.com" rel="preload" as="style" onload="this.rel='stylesheet'">
+</head>
+<body class="p-8">
+  <h1 class="text-3xl font-bold mb-4">{{ process.name }}</h1>
+  {% if process.description %}<p class="mb-4">{{ process.description|linebreaksbr }}</p>{% endif %}
+  <ol class="list-decimal ml-6 space-y-2">
+    {% for step in process.steps.all %}
+      <li>
+        <div class="font-semibold">{{ step.title }}</div>
+        {% if step.details %}<div class="opacity-80">{{ step.details|linebreaksbr }}</div>{% endif %}
+      </li>
+    {% endfor %}
+  </ol>
+  {% if process.notes %}<h2 class="text-xl font-semibold mt-6">Notes</h2><p>{{ process.notes|linebreaksbr }}</p>{% endif %}
+  <script>window.print()</script>
+</body>
+<html>
+
+

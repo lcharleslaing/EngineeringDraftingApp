@@ -1,0 +1,103 @@
+{% extends 'flow/step_pages/base_step_detail.html' %}
+
+{% block step_specific_content %}
+<!-- Drafting Queue Specific Content -->
+<div class="card bg-base-100 shadow-xl mt-8">
+    <div class="card-body">
+        <h2 class="card-title text-2xl mb-4">
+            <i class="fas fa-drafting-compass text-primary"></i>
+            Drafting & Engineering Work Process
+        </h2>
+        
+        <div class="prose max-w-none">
+            <h3>Project Setup</h3>
+            <ul>
+                <li>Create project workspace and file structure</li>
+                <li>Set up CAD environment and templates</li>
+                <li>Import reference drawings and specifications</li>
+                <li>Configure project-specific standards and layers</li>
+            </ul>
+            
+            <h3>Initial Drafting</h3>
+            <ul>
+                <li>Create base drawings from specifications</li>
+                <li>Develop 3D models and assemblies</li>
+                <li>Generate detailed component drawings</li>
+                <li>Create assembly and installation drawings</li>
+            </ul>
+            
+            <h3>Engineering Calculations</h3>
+            <ul>
+                <li>Perform structural and mechanical calculations</li>
+                <li>Verify design against applicable codes and standards</li>
+                <li>Calculate loads, stresses, and safety factors</li>
+                <li>Document calculation methods and results</li>
+            </ul>
+            
+            <h3>Quality Assurance</h3>
+            <ul>
+                <li>Internal review of all drawings and calculations</li>
+                <li>Cross-check dimensions and specifications</li>
+                <li>Verify compliance with project requirements</li>
+                <li>Final quality control before release</li>
+            </ul>
+            
+            <h3>Documentation Standards</h3>
+            <ul>
+                <li>Follow company drafting standards and procedures</li>
+                <li>Ensure all drawings are properly dimensioned and annotated</li>
+                <li>Include appropriate notes and specifications</li>
+                <li>Maintain revision control and version management</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Drafting Queue Specific Tools and Resources -->
+<div class="card bg-base-100 shadow-xl mt-8">
+    <div class="card-body">
+        <h2 class="card-title text-2xl mb-4">
+            <i class="fas fa-tools text-secondary"></i>
+            Tools & Resources
+        </h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <h3 class="font-semibold text-lg mb-3">CAD Software</h3>
+                <ul class="space-y-2">
+                    <li class="flex items-center">
+                        <i class="fas fa-check text-success mr-2"></i>
+                        AutoCAD
+                    </li>
+                    <li class="flex items-center">
+                        <i class="fas fa-check text-success mr-2"></i>
+                        SolidWorks
+                    </li>
+                    <li class="flex items-center">
+                        <i class="fas fa-check text-success mr-2"></i>
+                        Inventor
+                    </li>
+                </ul>
+            </div>
+            
+            <div>
+                <h3 class="font-semibold text-lg mb-3">Reference Materials</h3>
+                <ul class="space-y-2">
+                    <li class="flex items-center">
+                        <i class="fas fa-check text-success mr-2"></i>
+                        Engineering Standards
+                    </li>
+                    <li class="flex items-center">
+                        <i class="fas fa-check text-success mr-2"></i>
+                        Material Specifications
+                    </li>
+                    <li class="flex items-center">
+                        <i class="fas fa-check text-success mr-2"></i>
+                        Previous Project Files
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

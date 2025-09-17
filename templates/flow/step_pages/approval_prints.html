@@ -1,0 +1,40 @@
+{% extends 'flow/step_pages/base_step_detail.html' %}
+
+{% block step_specific_content %}
+<!-- Approval Prints Specific Content -->
+<div class="card bg-base-100 shadow-xl mt-8">
+    <div class="card-body">
+        <h2 class="card-title text-2xl mb-4">
+            <i class="fas fa-file-check text-primary"></i>
+            Print Review & Approval Guidelines
+        </h2>
+        
+        <div class="prose max-w-none">
+            <h3>Review Process</h3>
+            <ul>
+                <li>Verify print completeness and accuracy</li>
+                <li>Check dimensions and tolerances against specifications</li>
+                <li>Ensure compliance with engineering standards</li>
+                <li>Validate material specifications and requirements</li>
+                <li>Review for manufacturability and cost implications</li>
+            </ul>
+            
+            <h3>Quality Standards</h3>
+            <ul>
+                <li>All dimensions must be clearly defined and measurable</li>
+                <li>Tolerances must be appropriate for manufacturing capabilities</li>
+                <li>Material specifications must be complete and accurate</li>
+                <li>Assembly instructions must be clear and unambiguous</li>
+            </ul>
+            
+            <h3>Approval Criteria</h3>
+            <ul>
+                <li>Technical accuracy and completeness</li>
+                <li>Compliance with project specifications</li>
+                <li>Manufacturability and cost-effectiveness</li>
+                <li>Safety and regulatory compliance</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

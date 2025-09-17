@@ -1,0 +1,119 @@
+{% extends 'base.html' %}
+
+{% block title %}Create New Project - Drafting Engineering Flow{% endblock %}
+
+{% block content %}
+<div class="hero bg-base-200 py-8">
+    <div class="hero-content text-center">
+        <div class="max-w-2xl">
+            <h1 class="text-4xl font-bold mb-4">Create New Project</h1>
+            <p class="text-lg mb-6">Create a new project that will automatically follow the engineering workflow with realistic scheduling.</p>
+        </div>
+    </div>
+</div>
+
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-2xl mx-auto">
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title text-2xl mb-6">
+                    <i class="fas fa-plus-circle text-primary"></i>
+                    Project Details
+                </h2>
+                
+                <form method="post" class="space-y-6">
+                    {% csrf_token %}
+                    
+                    <div class="form-control">
+                        <label class="label" for="name">
+                            <span class="label-text font-semibold">Project Name *</span>
+                        </label>
+                        <input type="text" 
+                               id="name" 
+                               name="name" 
+                               class="input input-bordered w-full" 
+                               placeholder="Enter project name"
+                               required>
+                    </div>
+                    
+                    <div class="form-control">
+                        <label class="label" for="description">
+                            <span class="label-text font-semibold">Description</span>
+                        </label>
+                        <textarea id="description" 
+                                  name="description" 
+                                  class="textarea textarea-bordered w-full h-24" 
+                                  placeholder="Enter project description (optional)"></textarea>
+                    </div>
+                    
+                    <div class="form-control">
+                        <label class="label cursor-pointer">
+                            <span class="label-text font-semibold">Assign to me</span>
+                            <input type="checkbox" 
+                                   name="assign_to_me" 
+                                   class="checkbox checkbox-primary" 
+                                   checked>
+                        </label>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <div>
+                            <h3 class="font-bold">Automatic Scheduling</h3>
+                            <div class="text-sm">
+                                This project will be automatically scheduled based on the current workflow configuration:
+                                <ul class="list-disc list-inside mt-2 space-y-1">
+                                    <li>Main flow steps with their durations</li>
+                                    <li>Sub-process steps within each main step</li>
+                                    <li>Sequential dependencies between steps</li>
+                                    <li>Realistic target completion dates</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card-actions justify-end">
+                        <a href="{% url 'home' %}" class="btn btn-ghost">Cancel</a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-plus mr-2"></i>
+                            Create Project
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Workflow Preview -->
+        <div class="card bg-base-100 shadow-xl mt-8">
+            <div class="card-body">
+                <h3 class="card-title text-xl mb-4">
+                    <i class="fas fa-project-diagram text-secondary"></i>
+                    Workflow Preview
+                </h3>
+                <p class="text-sm text-base-content/70 mb-4">
+                    Your project will follow this workflow with automatic scheduling:
+                </p>
+                
+                <div class="space-y-3">
+                    {% for step in flow_steps %}
+                    <div class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
+                        <div class="flex items-center">
+                            <div class="badge badge-primary mr-3">{{ step.order }}</div>
+                            <div>
+                                <div class="font-semibold">{{ step.step_name }}</div>
+                                <div class="text-sm text-base-content/70">{{ step.formatted_duration }}</div>
+                            </div>
+                        </div>
+                        <div class="text-sm text-base-content/70">
+                            {% if step.subflows.exists %}
+                                {{ step.subflows.count }} sub-process{{ step.subflows.count|pluralize:"es" }}
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
