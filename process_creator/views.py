@@ -291,11 +291,32 @@ def process_word(request, pk: int):
                         # Get the full path to the image
                         img_path = os.path.join(settings.MEDIA_ROOT, str(img.image))
                         if os.path.exists(img_path):
-                            # Add image to document
-                            paragraph = doc.add_paragraph()
+                            # Add image to document with border using table
+                            table = doc.add_table(rows=1, cols=1)
+                            table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            cell = table.cell(0, 0)
+                            cell.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            
+                            # Add image to cell
+                            paragraph = cell.paragraphs[0]
                             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                            run = paragraph.runs[0] if paragraph.runs else paragraph.add_run()
+                            run = paragraph.add_run()
                             run.add_picture(img_path, width=Inches(6))
+                            
+                            # Add border to table cell
+                            from docx.oxml.shared import OxmlElement, qn
+                            tc = cell._tc
+                            tcPr = tc.get_or_add_tcPr()
+                            tcBorders = OxmlElement('w:tcBorders')
+                            for border_name in ['top', 'left', 'bottom', 'right']:
+                                border = OxmlElement(f'w:{border_name}')
+                                border.set(qn('w:val'), 'single')
+                                border.set(qn('w:sz'), '12')  # 3pt border
+                                border.set(qn('w:space'), '0')
+                                border.set(qn('w:color'), '333333')
+                                tcBorders.append(border)
+                            tcPr.append(tcBorders)
+                            
                     except Exception as e:
                         # If image can't be added, just continue
                         pass
