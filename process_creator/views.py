@@ -18,7 +18,8 @@ def process_list(request):
 @login_required
 @require_app_access('process_creator', action='edit')
 def process_create(request):
-    process = Process.objects.create(name="Untitled Process")
+    max_order = Process.objects.aggregate(models.Max("order")).get("order__max") or 0
+    process = Process.objects.create(name="Untitled Process", order=max_order + 1)
     return redirect("process_creator:edit", pk=process.pk)
 
 
@@ -84,6 +85,28 @@ def process_copy_prompt(request, pk: int):
         lines.append(process.notes)
     text = "\n\n".join(lines)
     return HttpResponse(text, content_type="text/markdown; charset=utf-8")
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def processes_reorder(request):
+    order_list = request.POST.getlist("order[]")
+    with transaction.atomic():
+        for index, process_id in enumerate(order_list, start=1):
+            Process.objects.filter(id=process_id).update(order=index)
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_app_access('process_creator', action='view')
+def process_print_all(request):
+    # ids parameter optional; if provided, filter
+    ids = request.GET.getlist('ids')
+    processes = Process.objects.all()
+    if ids:
+        processes = processes.filter(id__in=ids)
+    return render(request, "process_creator/print_all.html", {"processes": processes})
 
 
 @login_required

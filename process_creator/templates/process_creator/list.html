@@ -3,17 +3,29 @@
 {% block content %}
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-2xl font-bold">Process Creator</h1>
-  <a href="{% url 'process_creator:create' %}" class="btn btn-primary">New Process</a>
+  <div class="flex gap-2">
+    <button id="print-all" class="btn">Print All</button>
+    <a href="{% url 'process_creator:create' %}" class="btn btn-primary">New Process</a>
+  </div>
   </div>
 
-<div class="grid gap-4">
+<div id="process-list" class="grid gap-3">
   {% for p in processes %}
-    <div class="card bg-base-200">
-      <div class="card-body">
-        <div class="flex items-center justify-between">
-          <div>
-            <h2 class="card-title">{{ p.name }}</h2>
-            <p class="opacity-70">Updated {{ p.updated_at|date:'Y-m-d H:i' }}</p>
+    <div class="card bg-base-200 shadow-sm" data-id="{{ p.id }}">
+      <div class="card-body py-3 px-4">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <input type="checkbox" class="select-item checkbox checkbox-primary" checked />
+            <span class="drag cursor-grab text-base-content/60" title="Drag to reorder" aria-label="Drag to reorder">
+              <!-- grip-vertical icon -->
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
+                <path d="M7 5a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm8 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM7 10a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm8 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM7 15a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm8 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/>
+              </svg>
+            </span>
+            <div>
+              <div class="font-semibold">{{ p.name }}</div>
+              <div class="text-xs opacity-70">Updated {{ p.updated_at|date:'Y-m-d H:i' }}</div>
+            </div>
           </div>
           <div class="flex gap-2">
             <a class="btn btn-sm" href="{% url 'process_creator:edit' p.id %}">Edit</a>
@@ -28,6 +40,49 @@
     <div class="alert">No processes yet. Create one to get started.</div>
   {% endfor %}
 </div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function getCookie(name){
+  const value = `; ${document.cookie}`.split(`; ${name}=`).pop();
+  return value ? value.split(';').shift() : '';
+}
+
+// Drag reorder
+let dragEl = null;
+document.querySelectorAll('#process-list .card').forEach(card=>{
+  const handle = card.querySelector('.drag');
+  card.draggable = true;
+  card.addEventListener('dragstart', ()=>{ dragEl = card; card.classList.add('opacity-50'); });
+  card.addEventListener('dragend', ()=>{ card.classList.remove('opacity-50'); dragEl = null; saveOrder(); });
+});
+document.getElementById('process-list').addEventListener('dragover', (e)=>{
+  e.preventDefault();
+  const container = e.currentTarget;
+  const afterEl = Array.from(container.querySelectorAll('.card')).find(el=>{
+    const rect = el.getBoundingClientRect();
+    return e.clientY < rect.top + rect.height/2;
+  });
+  if (!afterEl) container.appendChild(dragEl); else container.insertBefore(dragEl, afterEl);
+});
+
+function saveOrder(){
+  const ids = Array.from(document.querySelectorAll('#process-list .card')).map(c=>c.dataset.id);
+  const form = new URLSearchParams(); ids.forEach(id=>form.append('order[]', id));
+  fetch('{% url "process_creator:reorder" %}', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}, body:form});
+}
+
+// Print all or selected
+document.getElementById('print-all').addEventListener('click', ()=>{
+  const ids = Array.from(document.querySelectorAll('#process-list .card'))
+    .filter(c=>c.querySelector('.select-item').checked)
+    .map(c=>c.dataset.id);
+  const params = new URLSearchParams(); ids.forEach(id=>params.append('ids', id));
+  window.open('{% url "process_creator:print_all" %}?'+params.toString(), '_blank');
+});
+</script>
 {% endblock %}
 
 

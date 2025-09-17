@@ -3,13 +3,14 @@ from django.db import models
 
 class Process(models.Model):
     name = models.CharField(max_length=255)
+    order = models.PositiveIntegerField(default=1)
     description = models.TextField(blank=True)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["-updated_at", "name"]
+        ordering = ["order", "name"]
 
     def __str__(self) -> str:
         return self.name

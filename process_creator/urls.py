@@ -12,10 +12,12 @@ urlpatterns = [
     path("<int:pk>/print/", views.process_print, name="print"),
     path("<int:pk>/copy/", views.process_copy_prompt, name="copy"),
     # AJAX endpoints
+    path("reorder/", views.processes_reorder, name="reorder"),
     path("<int:pk>/steps/reorder/", views.steps_reorder, name="steps_reorder"),
     path("<int:pk>/steps/add/", views.step_add, name="step_add"),
     path("<int:pk>/steps/<int:step_id>/update/", views.step_update, name="step_update"),
     path("<int:pk>/steps/<int:step_id>/delete/", views.step_delete, name="step_delete"),
+    path("print-all/", views.process_print_all, name="print_all"),
 ]
 
 
