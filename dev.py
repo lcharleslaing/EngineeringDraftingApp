@@ -8,6 +8,37 @@ import ipaddress
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 
+# Load .env file if it exists
+def load_env_file():
+    """Load environment variables from .env file"""
+    env_file = PROJECT_ROOT / '.env'
+    if env_file.exists():
+        with open(env_file, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    os.environ[key.strip()] = value.strip().strip('"').strip("'")
+
+# Load .env file
+load_env_file()
+
+# OpenAI API Key Configuration
+# Option 1: Set your API key directly here (replace with your actual key)
+# OPENAI_API_KEY = "sk-your-api-key-here"  # Replace with your actual API key
+
+# Option 2: Set as environment variable (now includes .env file)
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+
+if not OPENAI_API_KEY:
+    print("⚠️  WARNING: OPENAI_API_KEY not set. AI features will not work.")
+    print("   To fix this:")
+    print("   1. Get your key from: https://platform.openai.com/api-keys")
+    print("   2. Either:")
+    print("      - Set environment variable: set OPENAI_API_KEY=your-key-here")
+    print("      - Or uncomment and set the key directly in dev.py line 13")
+    print("")
+
 
 def find_venv_python() -> Path | None:
     """
@@ -211,6 +242,9 @@ def start_server(python_exe: Path, manage_py: Path, port: int) -> int:
     cmd = [str(python_exe), str(manage_py), "runserver", address]
     env = os.environ.copy()
     env.setdefault("PYTHONUNBUFFERED", "1")
+    # Set OpenAI API key if available
+    if OPENAI_API_KEY:
+        env["OPENAI_API_KEY"] = OPENAI_API_KEY
     try:
         # Keep attached to the current console; stream stdout/stderr until interrupted
         return subprocess.call(cmd, cwd=manage_py.parent, env=env)

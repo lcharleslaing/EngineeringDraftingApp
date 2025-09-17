@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Process, Step, StepImage
+from .models import Process, Step, StepImage, AIInteraction
 
 
 class StepInline(admin.TabularInline):
@@ -28,5 +28,14 @@ class StepAdmin(admin.ModelAdmin):
     list_filter = ("process",)
     ordering = ("process", "order")
     inlines = [StepImageInline]
+
+
+@admin.register(AIInteraction)
+class InteractionAdmin(admin.ModelAdmin):
+    list_display = ['process', 'interaction_type', 'tokens_used', 'cost', 'created_at']
+    list_filter = ['interaction_type', 'created_at']
+    search_fields = ['process__name', 'prompt_sent', 'response_received']
+    readonly_fields = ['created_at', 'tokens_used', 'cost']
+    ordering = ['-created_at']
 
 # Register your models here.

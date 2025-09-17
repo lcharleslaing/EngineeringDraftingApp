@@ -14,6 +14,9 @@ urlpatterns = [
     path("<int:pk>/pdf/", views.process_pdf, name="pdf"),
     path("<int:pk>/word/", views.process_word, name="word"),
     path("<int:pk>/stats/", views.process_stats, name="stats"),
+    # AI endpoints
+    path("<int:pk>/ai/summary/", views.ai_generate_summary, name="ai_summary"),
+    path("<int:pk>/ai/analyze/", views.ai_analyze_process, name="ai_analyze"),
     # AJAX endpoints
     path("reorder/", views.processes_reorder, name="reorder"),
     path("<int:pk>/steps/reorder/", views.steps_reorder, name="steps_reorder"),
@@ -24,6 +27,11 @@ urlpatterns = [
     path("<int:pk>/steps/<int:step_id>/images/upload/", views.step_image_upload, name="step_image_upload"),
     path("<int:pk>/steps/<int:step_id>/images/<int:image_id>/delete/", views.step_image_delete, name="step_image_delete"),
     path("print-all/", views.process_print_all, name="print_all"),
+    # Bulk operations
+    path("bulk/summary/", views.bulk_summary, name="bulk_summary"),
+    path("bulk/analyze/", views.bulk_analyze, name="bulk_analyze"),
+    path("bulk/pdf/", views.bulk_pdf, name="bulk_pdf"),
+    path("bulk/word/", views.bulk_word, name="bulk_word"),
 ]
 
 

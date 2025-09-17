@@ -3,7 +3,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>{{ process.name }} - Print</title>
+  <title>Bulk Process Report - Print</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { 
@@ -17,6 +17,7 @@
     }
     h1 { font-size: 16px; font-weight: bold; margin-bottom: 4px; margin-top: 0; }
     h2 { font-size: 12px; font-weight: bold; margin: 6px 0 2px 0; }
+    h3 { font-size: 11px; font-weight: bold; margin: 4px 0 1px 0; }
     ol { margin-left: 15px; margin-top: 2px; margin-bottom: 2px; }
     li { margin-bottom: 2px; line-height: 1.1; }
     .step-title { font-weight: bold; margin-bottom: 0px; }
@@ -41,6 +42,15 @@
       box-sizing: border-box;
     }
     .notes { margin-top: 4px; }
+    .process-divider {
+      border-top: 2px solid #333;
+      margin: 20px 0 10px 0;
+      page-break-before: auto;
+    }
+    .process-divider:first-child {
+      border-top: none;
+      margin-top: 0;
+    }
     .formatted-text {
       white-space: pre-line;
       font-family: Arial, sans-serif;
@@ -80,48 +90,66 @@
   </style>
 </head>
 <body>
-  <h1>{{ process.name }}</h1>
+  <h1>Bulk Process Report</h1>
   
-  {% if process.summary %}
-    <div class="summary-section">
+  {% for process in processes %}
+    {% if not forloop.first %}
+      <div class="process-divider"></div>
+    {% endif %}
+    
+    <h1>{{ process.name }}</h1>
+    
+    {% if process.summary %}
       <h2>Summary</h2>
       <div class="formatted-text">{{ process.summary|markdown_to_html|safe }}</div>
-    </div>
-  {% endif %}
-  
-  {% if process.description %}<p>{{ process.description|linebreaksbr }}</p>{% endif %}
-  
-  <h2>Steps</h2>
-  <ol>
-    {% for step in process.steps.all %}
-      <li>
-        <div class="step-title">{{ step.title }}</div>
-        {% if step.details %}<div class="step-details">{{ step.details|linebreaksbr }}</div>{% endif %}
-        {% if step.images.all %}
-          <div class="img-container">
-            {% for img in step.images.all %}
-              <img src="{{ img.image.url }}" alt="Step {{ step.order }} image {{ forloop.counter }}" />
-            {% endfor %}
-          </div>
-        {% endif %}
-      </li>
-    {% endfor %}
-  </ol>
-  
-  {% if process.notes %}
-    <div class="notes">
-      <h2>Notes</h2>
-      <p>{{ process.notes|linebreaksbr }}</p>
-    </div>
-  {% endif %}
-  
-  {% if process.analysis %}
-    <div class="analysis-section">
+    {% endif %}
+    
+    {% if process.description %}
+      <h2>Description</h2>
+      <p>{{ process.description }}</p>
+    {% endif %}
+    
+    {% if process.steps.exists %}
+      <h2>Steps</h2>
+      <ol>
+        {% for step in process.steps.all %}
+          <li>
+            <div class="step-title">{{ step.title }}</div>
+            {% if step.details %}
+              <div class="step-details">{{ step.details }}</div>
+            {% endif %}
+            {% if step.images.exists %}
+              <div class="img-container">
+                {% for img in step.images.all %}
+                  <img src="{{ img.image.url }}" alt="Step {{ step.order }} Image {{ forloop.counter }}" />
+                {% endfor %}
+              </div>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ol>
+    {% endif %}
+    
+    {% if process.notes %}
+      <div class="notes">
+        <h2>Notes</h2>
+        <p>{{ process.notes }}</p>
+      </div>
+    {% endif %}
+    
+    {% if process.analysis %}
       <h2>Process Analysis</h2>
       <div class="formatted-text">{{ process.analysis|markdown_to_html|safe }}</div>
-    </div>
+    {% endif %}
+  {% endfor %}
+  
+  {% if history_data %}
+    <div class="process-divider"></div>
+    <h1>History</h1>
+    {% for history_item in history_data %}
+      <h2>{{ history_item.type }} - {{ history_item.date }}</h2>
+      <div class="formatted-text">{{ history_item.content }}</div>
+    {% endfor %}
   {% endif %}
 </body>
 </html>
-
-

@@ -1,3 +1,4 @@
+{% load process_filters %}
 <!DOCTYPE html>
 <html>
 <head>
@@ -9,12 +10,49 @@
     .img-grid{display:grid;grid-template-columns:1fr;gap:0.5rem;}
     @media (min-width:768px){ .img-grid{grid-template-columns:1fr;} }
     @media print{ .img-grid{grid-template-columns:1fr;} }
+    .formatted-text {
+      white-space: pre-line;
+      font-family: Arial, sans-serif;
+      line-height: 1.3;
+      margin: 0;
+    }
+    .formatted-text h1, .formatted-text h2, .formatted-text h3 {
+      font-weight: bold;
+      margin: 8px 0 4px 0;
+    }
+    .formatted-text h1 { font-size: 16px; }
+    .formatted-text h2 { font-size: 14px; }
+    .formatted-text h3 { font-size: 13px; }
+    .formatted-text ul, .formatted-text ol {
+      margin: 4px 0;
+      padding-left: 20px;
+    }
+    .formatted-text li {
+      margin: 2px 0;
+      line-height: 1.3;
+    }
+    .formatted-text strong {
+      font-weight: bold;
+    }
+    .formatted-text em {
+      font-style: italic;
+    }
+    .formatted-text p {
+      margin: 4px 0;
+      line-height: 1.3;
+    }
   </style>
 </head>
 <body class="p-8">
   {% for p in processes %}
     <section class="mb-10 break-inside-avoid">
       <h1 class="text-3xl font-bold mb-2">{{ p.name }}</h1>
+      {% if p.summary %}
+        <div class="mb-4 p-4 bg-blue-50 border-l-4 border-blue-400">
+          <h2 class="text-xl font-semibold mb-2">Summary</h2>
+          <div class="formatted-text">{{ p.summary|markdown_to_html|safe }}</div>
+        </div>
+      {% endif %}
       {% if p.description %}<p class="mb-4">{{ p.description|linebreaksbr }}</p>{% endif %}
       <ol class="list-decimal ml-6 space-y-2">
         {% for step in p.steps.all %}
@@ -32,6 +70,12 @@
         {% endfor %}
       </ol>
       {% if p.notes %}<h2 class="text-xl font-semibold mt-6">Notes</h2><p>{{ p.notes|linebreaksbr }}</p>{% endif %}
+      {% if p.analysis %}
+        <div class="mt-6 p-4 bg-green-50 border-l-4 border-green-400">
+          <h2 class="text-xl font-semibold mb-2">Process Analysis</h2>
+          <div class="formatted-text">{{ p.analysis|markdown_to_html|safe }}</div>
+        </div>
+      {% endif %}
     </section>
   {% endfor %}
   <script>window.print()</script>

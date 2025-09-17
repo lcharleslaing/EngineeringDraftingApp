@@ -7,16 +7,48 @@ from rbac.decorators import require_app_access
 from django.db import models
 from django.template.loader import render_to_string
 from django.conf import settings
-from .models import Process, Step, StepImage
-from xhtml2pdf import pisa
-from django.template.loader import render_to_string
-from django.conf import settings
-from .models import Process, Step, StepImage
+from django.utils import timezone
+from .models import Process, Step, StepImage, AIInteraction
 from xhtml2pdf import pisa
 from docx import Document
 from docx.shared import Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import os
+import json
+import openai
+import re
+from decimal import Decimal
+from io import BytesIO
+from urllib.parse import quote
+
+
+def markdown_to_plain_text(text):
+    """Convert basic Markdown formatting to plain text with proper formatting"""
+    if not text:
+        return ""
+    
+    # Convert headers
+    text = re.sub(r'^### (.+)$', r'\1', text, flags=re.MULTILINE)
+    text = re.sub(r'^## (.+)$', r'\1', text, flags=re.MULTILINE)
+    text = re.sub(r'^# (.+)$', r'\1', text, flags=re.MULTILINE)
+    
+    # Convert bold text
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+    
+    # Convert italic text
+    text = re.sub(r'\*(.+?)\*', r'\1', text)
+    
+    # Convert bullet points
+    text = re.sub(r'^\* (.+)$', r'• \1', text, flags=re.MULTILINE)
+    text = re.sub(r'^- (.+)$', r'• \1', text, flags=re.MULTILINE)
+    
+    # Convert numbered lists
+    text = re.sub(r'^(\d+)\. (.+)$', r'\1. \2', text, flags=re.MULTILINE)
+    
+    # Clean up extra whitespace
+    text = re.sub(r'\n\s*\n', '\n\n', text)
+    
+    return text.strip()
 
 
 @login_required
@@ -49,6 +81,11 @@ def process_update(request, pk: int):
     name = request.POST.get('name')
     description = request.POST.get('description')
     notes = request.POST.get('notes')
+    summary = request.POST.get('summary')
+    summary_instructions = request.POST.get('summary_instructions')
+    analysis = request.POST.get('analysis')
+    analysis_instructions = request.POST.get('analysis_instructions')
+    
     if name is not None:
         if not name.strip():
             return JsonResponse({"ok": False, "error": "Name is required."}, status=400)
@@ -57,6 +94,15 @@ def process_update(request, pk: int):
         process.description = description
     if notes is not None:
         process.notes = notes
+    if summary is not None:
+        process.summary = summary
+    if summary_instructions is not None:
+        process.summary_instructions = summary_instructions
+    if analysis is not None:
+        process.analysis = analysis
+    if analysis_instructions is not None:
+        process.analysis_instructions = analysis_instructions
+    
     process.save()
     return JsonResponse({"ok": True})
 
@@ -251,8 +297,19 @@ def process_pdf(request, pk: int):
     pisa.CreatePDF(src=html_string, dest=pdf_io, link_callback=link_callback, encoding='utf-8')
     pdf_io.seek(0)
 
+    # Generate filename with process title and timestamp
+    from datetime import datetime
+    from urllib.parse import quote
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    safe_title = "".join(c for c in process.name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+    safe_title = safe_title.replace(' ', '-')
+    filename = f"Process-{safe_title}-{timestamp}.pdf"
+    
     response = HttpResponse(pdf_io.getvalue(), content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="process-{process.id}.pdf"'
+    response['Content-Disposition'] = f'attachment; filename="{quote(filename)}"'
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response['Pragma'] = 'no-cache'
+    response['Expires'] = '0'
     return response
 
 
@@ -268,10 +325,24 @@ def process_word(request, pk: int):
     title = doc.add_heading(process.name, 0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
+    # Add summary
+    if process.summary:
+        doc.add_heading('Summary', level=1)
+        # Format the summary text properly
+        formatted_summary = markdown_to_plain_text(process.summary)
+        # Split into paragraphs and add each one
+        for paragraph in formatted_summary.split('\n\n'):
+            if paragraph.strip():
+                p = doc.add_paragraph(paragraph.strip())
+                p.paragraph_format.space_after = Inches(0.1)
+                p.paragraph_format.line_spacing = 1.15
+    
     # Add description
     if process.description:
         doc.add_heading('Description', level=1)
-        doc.add_paragraph(process.description)
+        p = doc.add_paragraph(process.description)
+        p.paragraph_format.space_after = Inches(0.1)
+        p.paragraph_format.line_spacing = 1.15
     
     # Add steps
     if process.steps.exists():
@@ -282,7 +353,9 @@ def process_word(request, pk: int):
             
             # Add step details
             if step.details:
-                doc.add_paragraph(step.details)
+                p = doc.add_paragraph(step.details)
+                p.paragraph_format.space_after = Inches(0.1)
+                p.paragraph_format.line_spacing = 1.15
             
             # Add step images
             if step.images.exists():
@@ -324,7 +397,21 @@ def process_word(request, pk: int):
     # Add notes
     if process.notes:
         doc.add_heading('Notes', level=1)
-        doc.add_paragraph(process.notes)
+        p = doc.add_paragraph(process.notes)
+        p.paragraph_format.space_after = Inches(0.1)
+        p.paragraph_format.line_spacing = 1.15
+    
+    # Add analysis
+    if process.analysis:
+        doc.add_heading('Process Analysis', level=1)
+        # Format the analysis text properly
+        formatted_analysis = markdown_to_plain_text(process.analysis)
+        # Split into paragraphs and add each one
+        for paragraph in formatted_analysis.split('\n\n'):
+            if paragraph.strip():
+                p = doc.add_paragraph(paragraph.strip())
+                p.paragraph_format.space_after = Inches(0.1)
+                p.paragraph_format.line_spacing = 1.15
     
     # Save to BytesIO
     from io import BytesIO
@@ -332,8 +419,19 @@ def process_word(request, pk: int):
     doc.save(doc_io)
     doc_io.seek(0)
     
+    # Generate filename with process title and timestamp
+    from datetime import datetime
+    from urllib.parse import quote
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    safe_title = "".join(c for c in process.name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+    safe_title = safe_title.replace(' ', '-')
+    filename = f"Process-{safe_title}-{timestamp}.docx"
+    
     response = HttpResponse(doc_io.getvalue(), content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
-    response['Content-Disposition'] = f'attachment; filename="process-{process.id}.docx"'
+    response['Content-Disposition'] = f'attachment; filename="{quote(filename)}"'
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response['Pragma'] = 'no-cache'
+    response['Expires'] = '0'
     return response
 
 
@@ -363,5 +461,556 @@ def process_stats(request, pk: int):
     }
     
     return JsonResponse(stats)
+
+
+def call_openai_api(prompt, model="gpt-4o-mini", max_tokens=2000):
+    """Helper function to call OpenAI API and track usage"""
+    try:
+        if not settings.OPENAI_API_KEY:
+            return {
+                'success': False,
+                'error': 'OpenAI API key not configured. Please set OPENAI_API_KEY environment variable.',
+                'tokens_used': 0,
+                'cost': Decimal('0.00')
+            }
+        
+        client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+        
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=max_tokens,
+            temperature=0.7
+        )
+        
+        return {
+            'success': True,
+            'content': response.choices[0].message.content,
+            'tokens_used': response.usage.total_tokens,
+            'cost': calculate_cost(response.usage.total_tokens, model)
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'error': str(e),
+            'tokens_used': 0,
+            'cost': Decimal('0.00')
+        }
+
+
+def calculate_cost(tokens, model):
+    """Calculate cost based on token usage and model"""
+    # Pricing per 1K tokens (as of 2024)
+    pricing = {
+        'gpt-4o-mini': {'input': 0.00015, 'output': 0.0006},
+        'gpt-4o': {'input': 0.005, 'output': 0.015},
+        'gpt-3.5-turbo': {'input': 0.0015, 'output': 0.002}
+    }
+    
+    if model not in pricing:
+        model = 'gpt-4o-mini'
+    
+    # Rough estimate - assume 50/50 input/output split
+    cost_per_token = (pricing[model]['input'] + pricing[model]['output']) / 2
+    return Decimal(str(tokens * cost_per_token / 1000)).quantize(Decimal('0.000001'))
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def ai_generate_summary(request, pk: int):
+    """Generate AI summary for a process"""
+    process = get_object_or_404(Process, pk=pk)
+    
+    # Debug: Check if API key is available
+    if not settings.OPENAI_API_KEY:
+        return JsonResponse({
+            'success': False, 
+            'error': 'OpenAI API key not configured. Please set OPENAI_API_KEY environment variable.'
+        })
+    
+    # Get custom instructions or use default
+    data = json.loads(request.body)
+    instructions = data.get('instructions', process.summary_instructions)
+    
+    # Build prompt with process data
+    prompt = f"""{instructions}
+
+Process Details:
+Name: {process.name}
+Description: {process.description or 'No description provided'}
+
+Steps:
+"""
+    
+    for step in process.steps.all():
+        prompt += f"{step.order}. {step.title}\n"
+        if step.details:
+            prompt += f"   Details: {step.details}\n"
+        if step.images.exists():
+            prompt += f"   Images: {step.images.count()} screenshot(s)\n"
+        prompt += "\n"
+    
+    if process.notes:
+        prompt += f"Notes: {process.notes}\n"
+    
+    # Call OpenAI API
+    result = call_openai_api(prompt, max_tokens=500)
+    
+    if result['success']:
+        # Update process
+        process.summary = result['content']
+        process.summary_instructions = instructions
+        process.last_ai_update = timezone.now()
+        process.save()
+        
+        # Log interaction
+        AIInteraction.objects.create(
+            process=process,
+            interaction_type='summary',
+            prompt_sent=prompt,
+            response_received=result['content'],
+            tokens_used=result['tokens_used'],
+            cost=result['cost']
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'summary': result['content']
+        })
+    else:
+        return JsonResponse({
+            'success': False,
+            'error': result['error']
+        })
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def ai_analyze_process(request, pk: int):
+    """Generate AI analysis for process improvement"""
+    process = get_object_or_404(Process, pk=pk)
+    
+    # Debug: Check if API key is available
+    if not settings.OPENAI_API_KEY:
+        return JsonResponse({
+            'success': False, 
+            'error': 'OpenAI API key not configured. Please set OPENAI_API_KEY environment variable.'
+        })
+    
+    # Get custom instructions or use default
+    data = json.loads(request.body)
+    instructions = data.get('instructions', process.analysis_instructions)
+    
+    # Build comprehensive prompt
+    prompt = f"""You are a business process improvement consultant. {instructions}
+
+Process Details:
+Name: {process.name}
+Description: {process.description or 'No description provided'}
+
+Current Process Steps:
+"""
+    
+    for step in process.steps.all():
+        prompt += f"{step.order}. {step.title}\n"
+        if step.details:
+            prompt += f"   Details: {step.details}\n"
+        if step.images.exists():
+            prompt += f"   Images: {step.images.count()} screenshot(s)\n"
+        prompt += "\n"
+    
+    if process.notes:
+        prompt += f"Additional Notes: {process.notes}\n"
+    
+    prompt += f"\nCurrent Summary: {process.summary or 'No summary available'}\n"
+    
+    prompt += """
+Please provide a detailed analysis following the instructions above. Structure your response with clear headings and actionable recommendations.
+"""
+    
+    # Call OpenAI API
+    result = call_openai_api(prompt, max_tokens=2000)
+    
+    if result['success']:
+        # Update process
+        process.analysis = result['content']
+        process.analysis_instructions = instructions
+        process.last_ai_update = timezone.now()
+        process.save()
+        
+        # Log interaction
+        AIInteraction.objects.create(
+            process=process,
+            interaction_type='analysis',
+            prompt_sent=prompt,
+            response_received=result['content'],
+            tokens_used=result['tokens_used'],
+            cost=result['cost']
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'analysis': result['content']
+        })
+    else:
+        return JsonResponse({
+            'success': False,
+            'error': result['error']
+        })
+
+# Bulk Operations
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def bulk_summary(request):
+    """Generate summary for multiple processes"""
+    try:
+        data = json.loads(request.body)
+        process_ids = data.get('process_ids', [])
+        
+        if not process_ids:
+            return JsonResponse({'success': False, 'error': 'No processes selected'})
+        
+        # Get all selected processes
+        processes = Process.objects.filter(id__in=process_ids).order_by('order')
+        if not processes.exists():
+            return JsonResponse({'success': False, 'error': 'No valid processes found'})
+        
+        # Combine all process data
+        combined_data = []
+        for process in processes:
+            process_info = {
+                'name': process.name,
+                'description': process.description,
+                'steps': []
+            }
+            
+            for step in process.steps.all().order_by('order'):
+                step_info = {
+                    'title': step.title,
+                    'details': step.details
+                }
+                process_info['steps'].append(step_info)
+            
+            combined_data.append(process_info)
+        
+        # Use the default summary instructions
+        summary_instructions = "You are given a list of steps, bullet points, or fragmented notes. Your task is to transform them into a single professional, coherent paragraph. Do not repeat the steps as a list. Instead, weave them into smooth, natural prose that reads as if written by a skilled professional writer. Maintain accuracy, logical flow, and clarity. The output must always be a polished paragraph summary, never a bullet list."
+        
+        # Create comprehensive prompt
+        prompt = f"{summary_instructions}\n\nProcess Data:\n{json.dumps(combined_data, indent=2)}"
+        
+        # Call OpenAI API
+        result = call_openai_api(prompt, model='gpt-4o-mini')
+        
+        if result['success']:
+            return JsonResponse({
+                'success': True,
+                'summary': result['content']
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': result['error']
+            })
+            
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'Error generating bulk summary: {str(e)}'
+        })
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def bulk_analyze(request):
+    """Generate analysis for multiple processes"""
+    try:
+        data = json.loads(request.body)
+        process_ids = data.get('process_ids', [])
+        
+        if not process_ids:
+            return JsonResponse({'success': False, 'error': 'No processes selected'})
+        
+        # Get all selected processes
+        processes = Process.objects.filter(id__in=process_ids).order_by('order')
+        if not processes.exists():
+            return JsonResponse({'success': False, 'error': 'No valid processes found'})
+        
+        # Combine all process data
+        combined_data = []
+        for process in processes:
+            process_info = {
+                'name': process.name,
+                'description': process.description,
+                'notes': process.notes,
+                'steps': []
+            }
+            
+            for step in process.steps.all().order_by('order'):
+                step_info = {
+                    'title': step.title,
+                    'details': step.details
+                }
+                process_info['steps'].append(step_info)
+            
+            combined_data.append(process_info)
+        
+        # Use the default analysis instructions
+        analysis_instructions = """You are a senior operations analyst. You will receive a business process as input (steps, notes, and context). Produce a professional report titled "Training Analysis" that managers and frontline staff can act on.
+Follow these rules:
+- Write clearly and concisely; avoid jargon. Use confident, direct language.
+- Do NOT restate the steps as bullets. Summarize the process in flowing prose.
+- Use Markdown headings exactly as specified below.
+- Give specific, actionable recommendations with clear benefits and effort levels.
+- Where details are missing, make reasonable assumptions and state them briefly.
+=== INPUT START ===
+{PASTE PROCESS STEPS / NOTES / CONTEXT HERE}
+=== INPUT END ===
+=== OUTPUT FORMAT (Markdown) ===
+# Training Analysis
+## Executive Summary
+A 4–6 sentence overview of the process, the primary objective, the current state, and the most important recommended changes and expected benefits.
+## Process Narrative (Plain-Language Summary)
+6–10 sentences that narrate how the process works from start to finish. Use paragraph form only (no bullets). Emphasize flow, handoffs, tools used, approvals, and timing.
+## Assumptions
+- 2–5 short bullets listing key assumptions you made due to missing information.
+## Strengths
+- 4–8 bullets. Each bullet: what works well + why it matters (impact on quality, speed, cost, compliance, safety, or CX).
+## Weaknesses
+- 4–8 bullets. Each bullet: the issue + consequence (e.g., rework, delays, risk, cost).
+## Improvement Opportunities — Current System (No new software)
+Provide 5–10 specific, low-friction changes using existing tools, roles, and policies. For each item, use this format in one bullet:
+- **[Title]** — What to change (1–2 sentences). **Benefit:** expected outcome with a measurable indicator (e.g., "reduce cycle time by ~15%"). **Effort:** Low/Med/High. **Owner:** role. **Risk/Mitigation:** brief.
+## Immediate Application-Level Enhancements (Quick to implement in an app/workflow)
+Provide 3–7 changes that can be implemented quickly via simple configuration, scripts, forms, validations, templates, or notifications. For each item, use the same format:
+- **[Title]** — What to implement (1–2 sentences). **Benefit:** measurable. **Effort:** Low/Med/High. **Owner:** role. **Risk/Mitigation:** brief.
+## Implementation Roadmap
+Organize recommendations into phases with rationale:
+- **Now (0–30 days):** 3–6 highest-ROI, low-effort actions.
+- **Next (30–90 days):** 3–6 medium-effort actions that compound earlier gains.
+- **Later (90+ days):** 2–4 higher-effort changes that deliver strategic value.
+## Metrics & Monitoring
+List 4–8 KPIs with target direction and cadence. For each KPI: **Name**, **Target/Direction**, **Data Source**, **Review Cadence** (e.g., weekly), **Owner**.
+## Risks & Mitigations
+3–6 material risks across people/process/tech/compliance and how to mitigate each.
+## Final Recommendation
+A 4–6 sentence closing paragraph summarizing the case for change, expected benefits, and the immediate next steps.
+=== STYLE GUARDRAILS ===
+- Professional tone. Tight sentences. No filler, no hype.
+- Use paragraph form for the narrative sections; bullets only where specified.
+- Quantify benefits or ranges when plausible. Avoid vague claims.
+- Do not include meta-commentary or instructions in the output."""
+        
+        # Create comprehensive prompt
+        prompt = f"{analysis_instructions}\n\nProcess Data:\n{json.dumps(combined_data, indent=2)}"
+        
+        # Call OpenAI API
+        result = call_openai_api(prompt, model='gpt-4o-mini')
+        
+        if result['success']:
+            return JsonResponse({
+                'success': True,
+                'analysis': result['content']
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': result['error']
+            })
+            
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'Error generating bulk analysis: {str(e)}'
+        })
+
+
+@login_required
+@require_app_access('process_creator', action='view')
+def bulk_pdf(request):
+    """Generate PDF for multiple processes"""
+    process_ids = request.GET.getlist('ids')
+    if not process_ids:
+        return HttpResponse('No processes selected', status=400)
+    
+    processes = Process.objects.filter(id__in=process_ids).order_by('order')
+    if not processes.exists():
+        return HttpResponse('No valid processes found', status=400)
+    
+    # Get history data if included
+    history_data = []
+    if request.GET.get('include_history') == 'true':
+        try:
+            history_json = request.GET.get('history_data', '[]')
+            history_data = json.loads(history_json)
+        except (json.JSONDecodeError, TypeError):
+            history_data = []
+    
+    # Render template
+    html_string = render_to_string('process_creator/bulk_print.html', {
+        'processes': processes,
+        'history_data': history_data
+    })
+    
+    def link_callback(uri, rel):
+        sUrl = settings.STATIC_URL
+        sRoot = settings.STATIC_ROOT
+        mUrl = settings.MEDIA_URL
+        mRoot = settings.MEDIA_ROOT
+
+        if uri.startswith(mUrl):
+            path = os.path.join(mRoot, uri.replace(mUrl, ""))
+        elif uri.startswith(sUrl):
+            path = os.path.join(sRoot, uri.replace(sUrl, ""))
+        else:
+            path = os.path.join(settings.BASE_DIR, uri)
+
+        if not os.path.isfile(path):
+            return uri
+        return path
+
+    response = HttpResponse(content_type='application/pdf')
+    pdf_io = BytesIO()
+    pisa.CreatePDF(src=html_string, dest=pdf_io, link_callback=link_callback, encoding='utf-8')
+    pdf_io.seek(0)
+
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    filename = f"Bulk-Process-Report-{timestamp}.pdf"
+    
+    response = HttpResponse(pdf_io.getvalue(), content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{quote(filename)}"'
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response['Pragma'] = 'no-cache'
+    response['Expires'] = '0'
+    return response
+
+
+@login_required
+@require_app_access('process_creator', action='view')
+def bulk_word(request):
+    """Generate Word document for multiple processes"""
+    process_ids = request.GET.getlist('ids')
+    if not process_ids:
+        return HttpResponse('No processes selected', status=400)
+    
+    processes = Process.objects.filter(id__in=process_ids).order_by('order')
+    if not processes.exists():
+        return HttpResponse('No valid processes found', status=400)
+    
+    # Get history data if included
+    history_data = []
+    if request.GET.get('include_history') == 'true':
+        try:
+            history_json = request.GET.get('history_data', '[]')
+            history_data = json.loads(history_json)
+        except (json.JSONDecodeError, TypeError):
+            history_data = []
+    
+    doc = Document()
+    
+    # Add title
+    title = doc.add_heading('Bulk Process Report', 0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    # Add each process
+    for i, process in enumerate(processes, 1):
+        if i > 1:
+            doc.add_page_break()
+        
+        # Process name
+        process_heading = doc.add_heading(f'{i}. {process.name}', level=1)
+        
+        # Description
+        if process.description:
+            doc.add_heading('Description', level=2)
+            p = doc.add_paragraph(process.description)
+            p.paragraph_format.space_after = Inches(0.1)
+            p.paragraph_format.line_spacing = 1.15
+        
+        # Steps
+        if process.steps.exists():
+            doc.add_heading('Steps', level=2)
+            for step in process.steps.all():
+                step_heading = doc.add_heading(f'{step.order}. {step.title}', level=3)
+                
+                if step.details:
+                    p = doc.add_paragraph(step.details)
+                    p.paragraph_format.space_after = Inches(0.1)
+                    p.paragraph_format.line_spacing = 1.15
+                
+                # Images
+                if step.images.exists():
+                    for img in step.images.all():
+                        try:
+                            img_path = os.path.join(settings.MEDIA_ROOT, str(img.image))
+                            if os.path.exists(img_path):
+                                table = doc.add_table(rows=1, cols=1)
+                                table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                cell = table.cell(0, 0)
+                                cell.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                
+                                paragraph = cell.paragraphs[0]
+                                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                run = paragraph.add_run()
+                                run.add_picture(img_path, width=Inches(6))
+                                
+                                # Add border
+                                from docx.oxml.shared import OxmlElement, qn
+                                tc = cell._tc
+                                tcPr = tc.get_or_add_tcPr()
+                                tcBorders = OxmlElement('w:tcBorders')
+                                for border_name in ['top', 'left', 'bottom', 'right']:
+                                    border = OxmlElement(f'w:{border_name}')
+                                    border.set(qn('w:val'), 'single')
+                                    border.set(qn('w:sz'), '12')
+                                    border.set(qn('w:space'), '0')
+                                    border.set(qn('w:color'), '333333')
+                                    tcBorders.append(border)
+                                tcPr.append(tcBorders)
+                        except Exception as e:
+                            pass
+        
+        # Notes
+        if process.notes:
+            doc.add_heading('Notes', level=2)
+            p = doc.add_paragraph(process.notes)
+            p.paragraph_format.space_after = Inches(0.1)
+            p.paragraph_format.line_spacing = 1.15
+    
+    # Add history section if history data is provided
+    if history_data:
+        doc.add_page_break()
+        doc.add_heading('History', level=1)
+        
+        for i, history_item in enumerate(history_data, 1):
+            # History item title
+            history_heading = doc.add_heading(f'{i}. {history_item.get("type", "Unknown")} - {history_item.get("date", "")}', level=2)
+            
+            # History content
+            content = history_item.get('content', '')
+            if content:
+                p = doc.add_paragraph(content)
+                p.paragraph_format.space_after = Inches(0.1)
+                p.paragraph_format.line_spacing = 1.15
+    
+    doc_io = BytesIO()
+    doc.save(doc_io)
+    doc_io.seek(0)
+    
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    filename = f"Bulk-Process-Report-{timestamp}.docx"
+    
+    response = HttpResponse(doc_io.getvalue(), content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    response['Content-Disposition'] = f'attachment; filename="{quote(filename)}"'
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response['Pragma'] = 'no-cache'
+    response['Expires'] = '0'
+    return response
 
 # Create your views here.

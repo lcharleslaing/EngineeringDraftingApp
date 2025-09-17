@@ -16,6 +16,21 @@ import os
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load .env file if it exists
+def load_env_file():
+    """Load environment variables from .env file"""
+    env_file = BASE_DIR / '.env'
+    if env_file.exists():
+        with open(env_file, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    os.environ[key.strip()] = value.strip().strip('"').strip("'")
+
+# Load .env file
+load_env_file()
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -173,3 +188,6 @@ SECURE_SSL_REDIRECT = os.environ.get('DJANGO_SECURE_SSL_REDIRECT', '0') == '1'
 _env_csrf = os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS')
 if _env_csrf:
     CSRF_TRUSTED_ORIGINS = [o.strip() for o in _env_csrf.split(',') if o.strip()]
+
+# OpenAI API Configuration
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')

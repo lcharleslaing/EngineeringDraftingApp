@@ -16,8 +16,8 @@
         <a class="btn btn-outline btn-sm" href="{% url 'process_creator:list' %}">Back</a>
         <a class="btn btn-outline btn-sm" href="{% url 'process_creator:print' process.id %}" target="_blank">Print</a>
         <button id="copy-btn" class="btn btn-primary btn-sm" data-copy-url="{% url 'process_creator:copy' process.id %}">Copy</button>
-        <button id="pdf-btn" class="btn btn-secondary btn-sm" data-pdf-url="{% url 'process_creator:pdf' process.id %}">Save PDF</button>
-        <button id="word-btn" class="btn btn-accent btn-sm" data-word-url="{% url 'process_creator:word' process.id %}">Save Word</button>
+        <a id="pdf-btn" class="btn btn-secondary btn-sm" href="{% url 'process_creator:pdf' process.id %}" download>Save PDF</a>
+        <a id="word-btn" class="btn btn-accent btn-sm" href="{% url 'process_creator:word' process.id %}" download>Save Word</a>
       </div>
     </div>
   </div>
@@ -25,6 +25,33 @@
 
 <div class="max-w-7xl mx-auto px-1 sm:px-2 lg:px-4">
   <div class="grid grid-cols-12 gap-6">
+    <div class="col-span-12">
+      <div class="card bg-base-200 shadow-sm">
+        <div class="card-body p-4">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="font-semibold text-lg">📝 Process Summary</h2>
+            <button id="create-summary-btn" class="btn btn-primary btn-sm" data-process-id="{{ process.id }}">
+              <i class="fas fa-robot mr-1"></i>Create Summary
+            </button>
+          </div>
+          
+          <div class="mb-4">
+            <label class="label">
+              <span class="label-text font-medium">Summary Instructions</span>
+            </label>
+            <textarea id="summary-instructions" class="textarea textarea-bordered w-full min-h-20" placeholder="Instructions for AI summary generation">{{ process.summary_instructions }}</textarea>
+          </div>
+          
+          <div>
+            <label class="label">
+              <span class="label-text font-medium">Summary</span>
+            </label>
+            <textarea id="process-summary" class="textarea textarea-bordered w-full min-h-24" placeholder="AI-generated summary of the process">{{ process.summary }}</textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="col-span-12">
       <h2 class="font-semibold mb-2">Description</h2>
       <textarea id="process-description" class="textarea textarea-bordered w-full min-h-28" placeholder="Describe the process">{{ process.description }}</textarea>
@@ -76,6 +103,33 @@
       <h2 class="font-semibold mb-2">Notes</h2>
       <textarea id="process-notes" class="textarea textarea-bordered w-full min-h-40" placeholder="Any notes">{{ process.notes }}</textarea>
     </div>
+
+    <div class="col-span-12">
+      <div class="card bg-base-200 shadow-sm">
+        <div class="card-body p-4">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="font-semibold text-lg">📊 Process Analysis</h2>
+            <button id="analyze-btn" class="btn btn-accent btn-sm" data-process-id="{{ process.id }}">
+              <i class="fas fa-brain mr-1"></i>Analyze Process
+            </button>
+          </div>
+          
+          <div class="mb-4">
+            <label class="label">
+              <span class="label-text font-medium">Analysis Instructions</span>
+            </label>
+            <textarea id="analysis-instructions" class="textarea textarea-bordered w-full min-h-32" placeholder="Instructions for AI analysis">{{ process.analysis_instructions }}</textarea>
+          </div>
+          
+          <div>
+            <label class="label">
+              <span class="label-text font-medium">Analysis Results</span>
+            </label>
+            <textarea id="process-analysis" class="textarea textarea-bordered w-full min-h-40" placeholder="AI-generated analysis and improvement suggestions">{{ process.analysis }}</textarea>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -88,6 +142,19 @@
     </div>
     <div id="stats-content" class="space-y-4">
       <!-- Stats will be loaded here -->
+    </div>
+  </div>
+</dialog>
+
+<!-- Image Viewer Modal -->
+<dialog id="image-modal" class="modal">
+  <div class="modal-box w-11/12 max-w-4xl p-0">
+    <div class="flex items-center justify-between p-4 border-b">
+      <h3 class="font-bold text-lg">Image Viewer</h3>
+      <button class="btn btn-sm btn-circle btn-ghost" onclick="document.getElementById('image-modal').close()">✕</button>
+    </div>
+    <div class="p-4">
+      <img id="modal-image" src="" alt="Full size image" class="w-full h-auto max-h-[70vh] object-contain mx-auto" />
     </div>
   </div>
 </dialog>
@@ -111,18 +178,31 @@ function getCookie(name){
   return value ? value.split(';').shift() : '';
 }
 
+// Track if process has been updated since last AI interaction
+let processUpdated = false;
+
 // Autosave process fields
 function debouncedSave(){
   clearTimeout(window._saveT); window._saveT = setTimeout(() => {
     post(base + 'update/', {
       description: document.getElementById('process-description').value,
       notes: document.getElementById('process-notes').value,
+      summary: document.getElementById('process-summary').value,
+      summary_instructions: document.getElementById('summary-instructions').value,
+      analysis: document.getElementById('process-analysis').value,
+      analysis_instructions: document.getElementById('analysis-instructions').value,
+    }).then(() => {
+      processUpdated = true;
     });
   }, 400);
 }
 
 document.getElementById('process-description').addEventListener('input', debouncedSave);
 document.getElementById('process-notes').addEventListener('input', debouncedSave);
+document.getElementById('process-summary').addEventListener('input', debouncedSave);
+document.getElementById('summary-instructions').addEventListener('input', debouncedSave);
+document.getElementById('process-analysis').addEventListener('input', debouncedSave);
+document.getElementById('analysis-instructions').addEventListener('input', debouncedSave);
 
 // Name change via simple submit to update endpoint
 document.getElementById('process-name').addEventListener('change', async (e)=>{
@@ -198,53 +278,6 @@ document.getElementById('copy-btn').addEventListener('click', async (e)=>{
   }
 });
 
-// PDF download
-document.getElementById('pdf-btn').addEventListener('click', async (e)=>{
-  e.preventDefault();
-  const url = e.currentTarget.dataset.pdfUrl;
-  try {
-    const res = await fetch(url);
-    const blob = await res.blob();
-    const downloadUrl = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = `process-${processId}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(downloadUrl);
-  } catch(err) {
-    const toast = document.createElement('div');
-    toast.className = 'toast toast-top toast-end';
-    toast.innerHTML = '<div class="alert alert-error"><span>PDF download failed.</span></div>';
-    document.body.appendChild(toast);
-    setTimeout(()=>toast.remove(), 2000);
-  }
-});
-
-// Word download
-document.getElementById('word-btn').addEventListener('click', async (e)=>{
-  e.preventDefault();
-  const url = e.currentTarget.dataset.wordUrl;
-  try {
-    const res = await fetch(url);
-    const blob = await res.blob();
-    const downloadUrl = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = `process-${processId}.docx`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(downloadUrl);
-  } catch(err) {
-    const toast = document.createElement('div');
-    toast.className = 'toast toast-top toast-end';
-    toast.innerHTML = '<div class="alert alert-error"><span>Word download failed.</span></div>';
-    document.body.appendChild(toast);
-    setTimeout(()=>toast.remove(), 2000);
-  }
-});
 
 // Image uploads via file input
 document.querySelectorAll('input[data-upload-step]').forEach(input=>{
@@ -389,16 +422,113 @@ document.getElementById('stats-btn').addEventListener('click', async (e)=>{
   }
 });
 
-// Clicking thumbnails grid triggers hidden file input (except when clicking an image)
-document.querySelectorAll('[id^="imgs-"]').forEach(grid=>{
-  grid.addEventListener('click', (e)=>{
-    if (e.target.closest('.delete-img')) return;
-    if (e.target.tagName && e.target.tagName.toLowerCase() === 'img') return;
-    const card = grid.closest('.card');
-    const fileInput = card.querySelector('input[data-upload-step]');
-    if (fileInput) fileInput.click();
-  });
+// AI Create Summary
+document.getElementById('create-summary-btn').addEventListener('click', async (e)=>{
+  e.preventDefault();
+  const btn = e.target;
+  const originalText = btn.innerHTML;
+  
+  try {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Creating...';
+    
+    const instructions = document.getElementById('summary-instructions').value;
+    const res = await fetch(`/process-creator/${processId}/ai/summary/`, {
+      method: 'POST',
+      headers: {'X-CSRFToken': getCookie('csrftoken'), 'Content-Type': 'application/json'},
+      body: JSON.stringify({instructions: instructions})
+    });
+    
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+    
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('process-summary').value = data.summary;
+      
+      // Show success toast
+      const toast = document.createElement('div');
+      toast.className = 'toast toast-top toast-end';
+      toast.innerHTML = '<div class="alert alert-success"><span>Process summary created successfully!</span></div>';
+      document.body.appendChild(toast);
+      setTimeout(()=>toast.remove(), 3000);
+    } else {
+      throw new Error(data.error || 'Failed to generate process summary');
+    }
+  } catch(err) {
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-top toast-end';
+    toast.innerHTML = '<div class="alert alert-error"><span>Failed to create process summary: ' + err.message + '</span></div>';
+    document.body.appendChild(toast);
+    setTimeout(()=>toast.remove(), 5000);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
 });
+
+// AI Analysis
+document.getElementById('analyze-btn').addEventListener('click', async (e)=>{
+  e.preventDefault();
+  const btn = e.target;
+  const originalText = btn.innerHTML;
+  
+  try {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Analyzing...';
+    
+    const instructions = document.getElementById('analysis-instructions').value;
+    const res = await fetch(`/process-creator/${processId}/ai/analyze/`, {
+      method: 'POST',
+      headers: {'X-CSRFToken': getCookie('csrftoken'), 'Content-Type': 'application/json'},
+      body: JSON.stringify({instructions: instructions})
+    });
+    
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+    
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('process-analysis').value = data.analysis;
+      
+      // Show success toast
+      const toast = document.createElement('div');
+      toast.className = 'toast toast-top toast-end';
+      toast.innerHTML = '<div class="alert alert-success"><span>Process analysis completed successfully!</span></div>';
+      document.body.appendChild(toast);
+      setTimeout(()=>toast.remove(), 3000);
+    } else {
+      throw new Error(data.error || 'Failed to generate analysis');
+    }
+  } catch(err) {
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-top toast-end';
+    toast.innerHTML = '<div class="alert alert-error"><span>Failed to generate process analysis: ' + err.message + '</span></div>';
+    document.body.appendChild(toast);
+    setTimeout(()=>toast.remove(), 5000);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+});
+
+// Image click handler - open images in modal
+document.addEventListener('click', (e) => {
+  // Check if clicked element is an image within a step
+  if (e.target.tagName === 'IMG' && e.target.closest('[id^="imgs-"]')) {
+    e.preventDefault();
+    const imgSrc = e.target.src;
+    const modal = document.getElementById('image-modal');
+    const modalImg = document.getElementById('modal-image');
+    
+    modalImg.src = imgSrc;
+    modal.showModal();
+  }
+});
+
+// Image grid click handler removed - only "Add images" button opens file dialog
 
 // Paste handler on window - attach to nearest focused step card
 window.addEventListener('paste', async (e)=>{
@@ -414,16 +544,26 @@ window.addEventListener('paste', async (e)=>{
   const data = await res.json(); if (data.ok) addThumb(stepId, data);
 });
 
-// Delete image
-document.querySelectorAll('.delete-img').forEach(btn=>{
-  btn.addEventListener('click', async (e)=>{
-    e.preventDefault();
-    e.stopPropagation();
-    const stepId = e.currentTarget.getAttribute('data-step');
-    const id = e.currentTarget.getAttribute('data-id');
-    await fetch(base + 'steps/' + stepId + '/images/' + id + '/delete/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}});
-    e.currentTarget.closest('.relative').remove();
-  });
+// Delete image - use event delegation for all images
+document.addEventListener('click', async (e)=>{
+  const deleteBtn = e.target.closest('.delete-img');
+  if (!deleteBtn) return;
+  
+  e.preventDefault();
+  e.stopPropagation();
+  
+  const stepId = deleteBtn.getAttribute('data-step');
+  const id = deleteBtn.getAttribute('data-id');
+  
+  try {
+    await fetch(base + 'steps/' + stepId + '/images/' + id + '/delete/', {
+      method:'POST', 
+      headers:{'X-CSRFToken': getCookie('csrftoken')}
+    });
+    deleteBtn.closest('.relative').remove();
+  } catch(err) {
+    console.error('Failed to delete image:', err);
+  }
 });
 
 function addThumb(stepId, data){
@@ -432,13 +572,7 @@ function addThumb(stepId, data){
   div.className = 'relative group';
   div.innerHTML = `<img src="${data.url}" class="rounded border object-cover w-full h-28" /><button class="btn btn-xs btn-error absolute top-1 right-1 opacity-0 group-hover:opacity-100 delete-img" data-step="${stepId}" data-id="${data.id}">✕</button>`;
   container.appendChild(div);
-  div.querySelector('.delete-img').addEventListener('click', async (e)=>{
-    e.preventDefault();
-    e.stopPropagation();
-    const id = e.currentTarget.getAttribute('data-id');
-    await fetch(base + 'steps/' + stepId + '/images/' + id + '/delete/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}});
-    div.remove();
-  });
+  // Event listener is now handled by event delegation above
 }
 
 // Insert step before/after with event delegation (more reliable)
