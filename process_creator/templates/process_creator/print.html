@@ -3,22 +3,73 @@
 <head>
   <meta charset="utf-8" />
   <title>{{ process.name }} - Print</title>
-  <link href="https://cdn.tailwindcss.com" rel="preload" as="style" onload="this.rel='stylesheet'">
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      margin: 0; 
+      padding: 20px 40px; 
+      line-height: 1.6; 
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    h1 { font-size: 24px; font-weight: bold; margin-bottom: 16px; }
+    h2 { font-size: 18px; font-weight: bold; margin: 16px 0 8px 0; }
+    ol { margin-left: 20px; }
+    li { margin-bottom: 16px; }
+    .step-title { font-weight: bold; margin-bottom: 4px; }
+    .step-details { margin-bottom: 8px; }
+    .img-container { 
+      margin: 8px 0; 
+      text-align: center; 
+      padding: 0 20px;
+      box-sizing: border-box;
+    }
+    .img-container img { 
+      max-width: 100%; 
+      width: auto; 
+      max-height: 500px;
+      height: auto; 
+      display: block; 
+      margin: 4px auto;
+      border: 1px solid #ccc;
+      page-break-inside: avoid;
+      box-sizing: border-box;
+    }
+    .notes { margin-top: 24px; }
+    @media print {
+      body { padding: 15px 30px; }
+      .img-container { padding: 0 15px; }
+    }
+  </style>
 </head>
-<body class="p-8">
-  <h1 class="text-3xl font-bold mb-4">{{ process.name }}</h1>
-  {% if process.description %}<p class="mb-4">{{ process.description|linebreaksbr }}</p>{% endif %}
-  <ol class="list-decimal ml-6 space-y-2">
+<body>
+  <h1>{{ process.name }}</h1>
+  {% if process.description %}<p>{{ process.description|linebreaksbr }}</p>{% endif %}
+  
+  <h2>Steps</h2>
+  <ol>
     {% for step in process.steps.all %}
       <li>
-        <div class="font-semibold">{{ step.title }}</div>
-        {% if step.details %}<div class="opacity-80">{{ step.details|linebreaksbr }}</div>{% endif %}
+        <div class="step-title">{{ step.title }}</div>
+        {% if step.details %}<div class="step-details">{{ step.details|linebreaksbr }}</div>{% endif %}
+        {% if step.images.all %}
+          <div class="img-container">
+            {% for img in step.images.all %}
+              <img src="{{ img.image.url }}" alt="Step {{ step.order }} image {{ forloop.counter }}" />
+            {% endfor %}
+          </div>
+        {% endif %}
       </li>
     {% endfor %}
   </ol>
-  {% if process.notes %}<h2 class="text-xl font-semibold mt-6">Notes</h2><p>{{ process.notes|linebreaksbr }}</p>{% endif %}
-  <script>window.print()</script>
+  
+  {% if process.notes %}
+    <div class="notes">
+      <h2>Notes</h2>
+      <p>{{ process.notes|linebreaksbr }}</p>
+    </div>
+  {% endif %}
 </body>
-<html>
+</html>
 
 

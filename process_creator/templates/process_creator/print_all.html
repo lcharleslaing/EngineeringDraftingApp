@@ -4,6 +4,12 @@
   <meta charset="utf-8" />
   <title>Process Print</title>
   <link href="https://cdn.tailwindcss.com" rel="preload" as="style" onload="this.rel='stylesheet'">
+  <style>
+    .img-print{max-width:100%;width:100%;height:auto;page-break-inside:avoid;break-inside:avoid;}
+    .img-grid{display:grid;grid-template-columns:1fr;gap:0.5rem;}
+    @media (min-width:768px){ .img-grid{grid-template-columns:1fr;} }
+    @media print{ .img-grid{grid-template-columns:1fr;} }
+  </style>
 </head>
 <body class="p-8">
   {% for p in processes %}
@@ -15,6 +21,13 @@
           <li>
             <div class="font-semibold">{{ step.title }}</div>
             {% if step.details %}<div class="opacity-80">{{ step.details|linebreaksbr }}</div>{% endif %}
+            {% if step.images.all %}
+              <div class="img-grid mt-2">
+                {% for img in step.images.all %}
+                  <img src="{{ img.image.url }}" class="rounded border img-print" />
+                {% endfor %}
+              </div>
+            {% endif %}
           </li>
         {% endfor %}
       </ol>

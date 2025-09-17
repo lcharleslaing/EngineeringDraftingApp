@@ -5,9 +5,19 @@
   <div class="max-w-7xl mx-auto px-1 sm:px-2 lg:px-4 py-3 flex items-center gap-3">
     <input id="process-name" class="input input-bordered w-full" value="{{ process.name }}" placeholder="Process name" required />
     <div class="ml-auto flex gap-2">
+      <label class="flex items-center gap-2">
+        <input id="toggle-images" type="checkbox" class="toggle toggle-primary" checked />
+        <span class="text-sm">Show images</span>
+      </label>
+      <label class="flex items-center gap-2">
+        <input id="toggle-autolight" type="checkbox" class="toggle toggle-secondary" checked />
+        <span class="text-sm">Auto-lighten screenshots</span>
+      </label>
       <a class="btn btn-outline" href="{% url 'process_creator:list' %}">Back</a>
       <a class="btn btn-outline" href="{% url 'process_creator:print' process.id %}" target="_blank">Print</a>
       <button id="copy-btn" class="btn btn-primary" data-copy-url="{% url 'process_creator:copy' process.id %}">Copy</button>
+      <button id="pdf-btn" class="btn btn-secondary" data-pdf-url="{% url 'process_creator:pdf' process.id %}">Save PDF</button>
+      <button id="word-btn" class="btn btn-accent" data-word-url="{% url 'process_creator:word' process.id %}">Save Word</button>
     </div>
   </div>
   </div>
@@ -33,9 +43,28 @@
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4h4v2h-4V4zm0 14h4v2h-4v-2zM4 10h2v4H4v-4zm14 0h2v4h-2v-4z"/></svg>
                 </span>
                 <input class="step-title input input-sm input-bordered flex-1" value="{{ step.title }}" required />
-                <button class="btn btn-sm btn-error step-delete">Delete</button>
+                <div class="flex gap-1">
+                  <button class="btn btn-sm" data-insert="up" title="Add before">+ ☝️</button>
+                  <button class="btn btn-sm" data-insert="down" title="Add after">+ 👇</button>
+                  <button class="btn btn-sm btn-error step-delete">Delete</button>
+                </div>
               </div>
               <textarea class="step-details textarea textarea-bordered mt-3 h-24" placeholder="Details">{{ step.details }}</textarea>
+              <div class="mt-3 img-section">
+                <div class="text-sm opacity-70 mb-1">Screenshots (paste or drop images)</div>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-2" id="imgs-{{ step.id }}">
+                  {% for img in step.images.all %}
+                    <div class="relative group">
+                      <img src="{{ img.image.url }}" class="rounded border object-cover w-full h-28" />
+                      <button class="btn btn-xs btn-error absolute top-1 right-1 opacity-0 group-hover:opacity-100 delete-img" data-step="{{ step.id }}" data-id="{{ img.id }}">✕</button>
+                    </div>
+                  {% endfor %}
+                </div>
+                <div class="mt-2 flex gap-2">
+                  <button type="button" class="btn btn-sm" data-open-upload="{{ step.id }}">Add images</button>
+                  <input type="file" accept="image/*" multiple class="hidden" data-upload-step="{{ step.id }}" />
+                </div>
+              </div>
             </div>
           </div>
         {% endfor %}
@@ -152,6 +181,171 @@ document.getElementById('copy-btn').addEventListener('click', async (e)=>{
     toast.innerHTML = '<div class="alert alert-error"><span>Copy failed.</span></div>';
     document.body.appendChild(toast);
     setTimeout(()=>toast.remove(), 2000);
+  }
+});
+
+// PDF download
+document.getElementById('pdf-btn').addEventListener('click', async (e)=>{
+  e.preventDefault();
+  const url = e.currentTarget.dataset.pdfUrl;
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = `process-${processId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(downloadUrl);
+  } catch(err) {
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-top toast-end';
+    toast.innerHTML = '<div class="alert alert-error"><span>PDF download failed.</span></div>';
+    document.body.appendChild(toast);
+    setTimeout(()=>toast.remove(), 2000);
+  }
+});
+
+// Word download
+document.getElementById('word-btn').addEventListener('click', async (e)=>{
+  e.preventDefault();
+  const url = e.currentTarget.dataset.wordUrl;
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = `process-${processId}.docx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(downloadUrl);
+  } catch(err) {
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-top toast-end';
+    toast.innerHTML = '<div class="alert alert-error"><span>Word download failed.</span></div>';
+    document.body.appendChild(toast);
+    setTimeout(()=>toast.remove(), 2000);
+  }
+});
+
+// Image uploads via file input
+document.querySelectorAll('input[data-upload-step]').forEach(input=>{
+  input.addEventListener('change', async (e)=>{
+    const stepId = e.currentTarget.getAttribute('data-upload-step');
+    for (const file of e.currentTarget.files) {
+      const fd = new FormData(); fd.append('image', file);
+      const res = await fetch(base + 'steps/' + stepId + '/images/upload/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}, body: fd});
+      const data = await res.json(); if (data.ok) addThumb(stepId, data);
+    }
+    e.currentTarget.value = '';
+  });
+});
+
+// Dedicated button opens file input
+document.querySelectorAll('[data-open-upload]').forEach(btn=>{
+  btn.addEventListener('click', (e)=>{
+    e.preventDefault();
+    const stepId = e.currentTarget.getAttribute('data-open-upload');
+    const input = document.querySelector(`input[data-upload-step="${stepId}"]`);
+    if (input) input.click();
+  });
+});
+
+// Master toggle show/hide images (display only; print unaffected)
+const imgToggle = document.getElementById('toggle-images');
+const TOGGLE_KEY = 'process_creator_show_images';
+function applyImageVisibility(){
+  const show = imgToggle.checked;
+  document.querySelectorAll('.img-section').forEach(sec=>{
+    sec.style.display = show ? '' : 'none';
+  });
+  try { localStorage.setItem(TOGGLE_KEY, show ? '1' : '0'); } catch(e) {}
+}
+// Initialize from localStorage (default: show)
+try {
+  const saved = localStorage.getItem(TOGGLE_KEY);
+  if (saved === '0') imgToggle.checked = false;
+} catch(e) {}
+imgToggle.addEventListener('change', applyImageVisibility);
+// Apply once on load
+applyImageVisibility();
+
+// Clicking thumbnails grid triggers hidden file input (except when clicking an image)
+document.querySelectorAll('[id^="imgs-"]').forEach(grid=>{
+  grid.addEventListener('click', (e)=>{
+    if (e.target.closest('.delete-img')) return;
+    if (e.target.tagName && e.target.tagName.toLowerCase() === 'img') return;
+    const card = grid.closest('.card');
+    const fileInput = card.querySelector('input[data-upload-step]');
+    if (fileInput) fileInput.click();
+  });
+});
+
+// Paste handler on window - attach to nearest focused step card
+window.addEventListener('paste', async (e)=>{
+  const items = e.clipboardData && e.clipboardData.items; if (!items) return;
+  let file = null; for (const it of items) { if (it.type.indexOf('image') !== -1) { file = it.getAsFile(); break; } }
+  if (!file) return;
+  // find focused step
+  const active = document.activeElement.closest('.card');
+  if (!active) return;
+  const stepId = active.dataset.id;
+  const fd = new FormData(); fd.append('file', file);
+  const res = await fetch(base + 'steps/' + stepId + '/images/upload/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}, body: fd});
+  const data = await res.json(); if (data.ok) addThumb(stepId, data);
+});
+
+// Delete image
+document.querySelectorAll('.delete-img').forEach(btn=>{
+  btn.addEventListener('click', async (e)=>{
+    e.preventDefault();
+    e.stopPropagation();
+    const stepId = e.currentTarget.getAttribute('data-step');
+    const id = e.currentTarget.getAttribute('data-id');
+    await fetch(base + 'steps/' + stepId + '/images/' + id + '/delete/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}});
+    e.currentTarget.closest('.relative').remove();
+  });
+});
+
+function addThumb(stepId, data){
+  const container = document.getElementById('imgs-'+stepId);
+  const div = document.createElement('div');
+  div.className = 'relative group';
+  div.innerHTML = `<img src="${data.url}" class="rounded border object-cover w-full h-28" /><button class="btn btn-xs btn-error absolute top-1 right-1 opacity-0 group-hover:opacity-100 delete-img" data-step="${stepId}" data-id="${data.id}">✕</button>`;
+  container.appendChild(div);
+  div.querySelector('.delete-img').addEventListener('click', async (e)=>{
+    e.preventDefault();
+    e.stopPropagation();
+    const id = e.currentTarget.getAttribute('data-id');
+    await fetch(base + 'steps/' + stepId + '/images/' + id + '/delete/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}});
+    div.remove();
+  });
+}
+
+// Insert step before/after with event delegation (more reliable)
+document.getElementById('steps').addEventListener('click', async (e)=>{
+  const btn = e.target.closest('button[data-insert]');
+  if (!btn) return;
+  e.preventDefault();
+  const card = btn.closest('.card');
+  if (!card) return;
+  const id = card.dataset.id;
+  const dir = btn.getAttribute('data-insert');
+  try {
+    btn.disabled = true;
+    const res = await fetch(base + 'steps/' + id + '/insert/' + dir + '/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}});
+    const data = await res.json();
+    if (data && data.ok) {
+      location.reload();
+    } else {
+      btn.disabled = false;
+    }
+  } catch(err) {
+    btn.disabled = false;
   }
 });
 </script>

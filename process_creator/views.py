@@ -5,7 +5,18 @@ from django.db import transaction
 from django.contrib.auth.decorators import login_required
 from rbac.decorators import require_app_access
 from django.db import models
-from .models import Process, Step
+from django.template.loader import render_to_string
+from django.conf import settings
+from .models import Process, Step, StepImage
+from xhtml2pdf import pisa
+from django.template.loader import render_to_string
+from django.conf import settings
+from .models import Process, Step, StepImage
+from xhtml2pdf import pisa
+from docx import Document
+from docx.shared import Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+import os
 
 
 @login_required
@@ -143,6 +154,23 @@ def step_add(request, pk: int):
 @login_required
 @require_app_access('process_creator', action='edit')
 @require_POST
+def step_insert(request, pk: int, step_id: int, direction: str):
+    process = get_object_or_404(Process, pk=pk)
+    ref = get_object_or_404(Step, pk=step_id, process=process)
+    title = request.POST.get("title", "New Step").strip() or "New Step"
+    if direction not in ("up", "down"):
+        return JsonResponse({"ok": False, "error": "Invalid direction"}, status=400)
+    with transaction.atomic():
+        insert_order = ref.order if direction == "up" else ref.order + 1
+        # shift steps >= insert_order by +1
+        Step.objects.filter(process=process, order__gte=insert_order).update(order=models.F('order') + 1)
+        step = Step.objects.create(process=process, order=insert_order, title=title)
+    return JsonResponse({"ok": True, "id": step.id, "order": step.order})
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
 def step_update(request, pk: int, step_id: int):
     process = get_object_or_404(Process, pk=pk)
     step = get_object_or_404(Step, pk=step_id, process=process)
@@ -169,5 +197,122 @@ def step_delete(request, pk: int, step_id: int):
         if s.order != index:
             Step.objects.filter(pk=s.pk).update(order=index)
     return JsonResponse({"ok": True})
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def step_image_upload(request, pk: int, step_id: int):
+    process = get_object_or_404(Process, pk=pk)
+    step = get_object_or_404(Step, pk=step_id, process=process)
+    # Expect an image file under 'image' or a pasted blob as 'file'
+    file = request.FILES.get('image') or request.FILES.get('file')
+    if not file:
+        return JsonResponse({"ok": False, "error": "No image provided"}, status=400)
+    max_order = step.images.aggregate(models.Max('order')).get('order__max') or 0
+    img = StepImage.objects.create(step=step, image=file, order=max_order + 1)
+    return JsonResponse({"ok": True, "id": img.id, "url": img.image.url, "order": img.order})
+
+
+@login_required
+@require_app_access('process_creator', action='delete')
+@require_POST
+def step_image_delete(request, pk: int, step_id: int, image_id: int):
+    process = get_object_or_404(Process, pk=pk)
+    step = get_object_or_404(Step, pk=step_id, process=process)
+    img = get_object_or_404(StepImage, pk=image_id, step=step)
+    img.delete()
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_app_access('process_creator', action='view')
+def process_pdf(request, pk: int):
+    process = get_object_or_404(Process, pk=pk)
+
+    # Render the print template to HTML
+    html_string = render_to_string('process_creator/print.html', {'process': process})
+
+    # Helper to resolve static/media URLs for xhtml2pdf
+    def link_callback(uri, rel):
+        if uri.startswith('/media/'):
+            path = os.path.join(settings.MEDIA_ROOT, uri.replace('/media/', ''))
+            return path
+        if uri.startswith('/static/'):
+            # If STATIC_ROOT is set, prefer it; otherwise try finders
+            static_root = getattr(settings, 'STATIC_ROOT', None)
+            if static_root:
+                return os.path.join(static_root, uri.replace('/static/', ''))
+        return uri
+
+    # Generate PDF via xhtml2pdf
+    from io import BytesIO
+    pdf_io = BytesIO()
+    pisa.CreatePDF(src=html_string, dest=pdf_io, link_callback=link_callback, encoding='utf-8')
+    pdf_io.seek(0)
+
+    response = HttpResponse(pdf_io.getvalue(), content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="process-{process.id}.pdf"'
+    return response
+
+
+@login_required
+@require_app_access('process_creator', action='view')
+def process_word(request, pk: int):
+    process = get_object_or_404(Process, pk=pk)
+    
+    # Create a new Word document
+    doc = Document()
+    
+    # Add title
+    title = doc.add_heading(process.name, 0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    # Add description
+    if process.description:
+        doc.add_heading('Description', level=1)
+        doc.add_paragraph(process.description)
+    
+    # Add steps
+    if process.steps.exists():
+        doc.add_heading('Steps', level=1)
+        for step in process.steps.all():
+            # Add step title
+            step_heading = doc.add_heading(f'{step.order}. {step.title}', level=2)
+            
+            # Add step details
+            if step.details:
+                doc.add_paragraph(step.details)
+            
+            # Add step images
+            if step.images.exists():
+                for img in step.images.all():
+                    try:
+                        # Get the full path to the image
+                        img_path = os.path.join(settings.MEDIA_ROOT, str(img.image))
+                        if os.path.exists(img_path):
+                            # Add image to document
+                            paragraph = doc.add_paragraph()
+                            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            run = paragraph.runs[0] if paragraph.runs else paragraph.add_run()
+                            run.add_picture(img_path, width=Inches(6))
+                    except Exception as e:
+                        # If image can't be added, just continue
+                        pass
+    
+    # Add notes
+    if process.notes:
+        doc.add_heading('Notes', level=1)
+        doc.add_paragraph(process.notes)
+    
+    # Save to BytesIO
+    from io import BytesIO
+    doc_io = BytesIO()
+    doc.save(doc_io)
+    doc_io.seek(0)
+    
+    response = HttpResponse(doc_io.getvalue(), content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    response['Content-Disposition'] = f'attachment; filename="process-{process.id}.docx"'
+    return response
 
 # Create your views here.

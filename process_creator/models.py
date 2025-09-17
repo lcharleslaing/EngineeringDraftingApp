@@ -31,4 +31,14 @@ class Step(models.Model):
     def __str__(self) -> str:
         return f"{self.order}. {self.title}"
 
+
+class StepImage(models.Model):
+    step = models.ForeignKey(Step, related_name="images", on_delete=models.CASCADE)
+    image = models.ImageField(upload_to="process_screenshots/")
+    order = models.PositiveIntegerField(default=1)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+
 # Create your models here.
