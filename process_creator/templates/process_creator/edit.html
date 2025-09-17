@@ -2,25 +2,26 @@
 {% block title %}Edit: {{ process.name }}{% endblock %}
 {% block content %}
 <div class="sticky top-0 z-10 bg-base-100/90 backdrop-blur border-b border-base-200 mb-6">
-  <div class="max-w-7xl mx-auto px-1 sm:px-2 lg:px-4 py-3 flex items-center gap-3">
-    <input id="process-name" class="input input-bordered w-full" value="{{ process.name }}" placeholder="Process name" required />
-    <div class="ml-auto flex gap-2">
+  <div class="max-w-7xl mx-auto px-1 sm:px-2 lg:px-4 py-3">
+    <div class="flex items-center gap-3 mb-3">
+      <input id="process-name" class="input input-bordered w-full" value="{{ process.name }}" placeholder="Process name" required />
+      <button id="stats-btn" class="btn btn-info btn-sm" data-process-id="{{ process.id }}">Stats</button>
+    </div>
+    <div class="flex items-center gap-2">
       <label class="flex items-center gap-2">
         <input id="toggle-images" type="checkbox" class="toggle toggle-primary" checked />
         <span class="text-sm">Show images</span>
       </label>
-      <label class="flex items-center gap-2">
-        <input id="toggle-autolight" type="checkbox" class="toggle toggle-secondary" checked />
-        <span class="text-sm">Auto-lighten screenshots</span>
-      </label>
-      <a class="btn btn-outline" href="{% url 'process_creator:list' %}">Back</a>
-      <a class="btn btn-outline" href="{% url 'process_creator:print' process.id %}" target="_blank">Print</a>
-      <button id="copy-btn" class="btn btn-primary" data-copy-url="{% url 'process_creator:copy' process.id %}">Copy</button>
-      <button id="pdf-btn" class="btn btn-secondary" data-pdf-url="{% url 'process_creator:pdf' process.id %}">Save PDF</button>
-      <button id="word-btn" class="btn btn-accent" data-word-url="{% url 'process_creator:word' process.id %}">Save Word</button>
+      <div class="ml-auto flex gap-2">
+        <a class="btn btn-outline btn-sm" href="{% url 'process_creator:list' %}">Back</a>
+        <a class="btn btn-outline btn-sm" href="{% url 'process_creator:print' process.id %}" target="_blank">Print</a>
+        <button id="copy-btn" class="btn btn-primary btn-sm" data-copy-url="{% url 'process_creator:copy' process.id %}">Copy</button>
+        <button id="pdf-btn" class="btn btn-secondary btn-sm" data-pdf-url="{% url 'process_creator:pdf' process.id %}">Save PDF</button>
+        <button id="word-btn" class="btn btn-accent btn-sm" data-word-url="{% url 'process_creator:word' process.id %}">Save Word</button>
+      </div>
     </div>
   </div>
-  </div>
+</div>
 
 <div class="max-w-7xl mx-auto px-1 sm:px-2 lg:px-4">
   <div class="grid grid-cols-12 gap-6">
@@ -77,6 +78,19 @@
     </div>
   </div>
 </div>
+
+<!-- Stats Modal -->
+<dialog id="stats-modal" class="modal">
+  <div class="modal-box w-11/12 max-w-2xl">
+    <div class="flex items-center justify-between mb-6">
+      <h3 class="font-bold text-2xl text-primary">📊 Process Statistics</h3>
+      <button class="btn btn-sm btn-circle btn-ghost" onclick="document.getElementById('stats-modal').close()">✕</button>
+    </div>
+    <div id="stats-content" class="space-y-4">
+      <!-- Stats will be loaded here -->
+    </div>
+  </div>
+</dialog>
 
 {% endblock %}
 
@@ -273,6 +287,107 @@ try {
 imgToggle.addEventListener('change', applyImageVisibility);
 // Apply once on load
 applyImageVisibility();
+
+// Stats modal functionality
+document.getElementById('stats-btn').addEventListener('click', async (e)=>{
+  e.preventDefault();
+  const modal = document.getElementById('stats-modal');
+  const content = document.getElementById('stats-content');
+  
+  try {
+    const res = await fetch(`/process-creator/${processId}/stats/`);
+    const data = await res.json();
+    
+    content.innerHTML = `
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Timeline Section -->
+        <div class="card bg-base-200 shadow-sm">
+          <div class="card-body p-4">
+            <h4 class="card-title text-lg text-primary mb-4">📅 Timeline</h4>
+            <div class="space-y-3">
+              <div class="flex items-center gap-3">
+                <div class="badge badge-primary badge-sm">Created</div>
+                <div class="text-sm font-medium">${data.created_at}</div>
+              </div>
+              <div class="flex items-center gap-3">
+                <div class="badge badge-secondary badge-sm">Updated</div>
+                <div class="text-sm font-medium">${data.updated_at}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Content Stats -->
+        <div class="card bg-base-200 shadow-sm">
+          <div class="card-body p-4">
+            <h4 class="card-title text-lg text-accent mb-4">📝 Content</h4>
+            <div class="space-y-3">
+              <div class="flex justify-between items-center">
+                <span class="text-sm opacity-70">Steps</span>
+                <div class="badge badge-accent badge-lg">${data.step_count}</div>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-sm opacity-70">Images</span>
+                <div class="badge badge-accent badge-lg">${data.image_count}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Text Stats -->
+        <div class="card bg-base-200 shadow-sm">
+          <div class="card-body p-4">
+            <h4 class="card-title text-lg text-info mb-4">📄 Text Content</h4>
+            <div class="space-y-3">
+              <div class="flex justify-between items-center">
+                <span class="text-sm opacity-70">Description</span>
+                <div class="text-sm font-medium">${data.description_length} chars</div>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-sm opacity-70">Notes</span>
+                <div class="text-sm font-medium">${data.notes_length} chars</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Summary Stats -->
+        <div class="card bg-gradient-to-br from-primary to-secondary text-primary-content shadow-lg">
+          <div class="card-body p-4">
+            <h4 class="card-title text-lg mb-4">🎯 Summary</h4>
+            <div class="space-y-2">
+              <div class="flex justify-between">
+                <span class="text-sm opacity-90">Total Content</span>
+                <span class="font-bold">${data.step_count + data.image_count} items</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-sm opacity-90">Text Length</span>
+                <span class="font-bold">${data.description_length + data.notes_length} chars</span>
+              </div>
+              <div class="divider my-2"></div>
+              <div class="text-center">
+                <div class="text-2xl font-bold">${data.step_count > 0 ? Math.round(data.image_count / data.step_count * 10) / 10 : 0}</div>
+                <div class="text-sm opacity-90">images per step</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    modal.showModal();
+  } catch(err) {
+    content.innerHTML = `
+      <div class="alert alert-error">
+        <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span>Failed to load statistics. Please try again.</span>
+      </div>
+    `;
+    modal.showModal();
+  }
+});
 
 // Clicking thumbnails grid triggers hidden file input (except when clicking an image)
 document.querySelectorAll('[id^="imgs-"]').forEach(grid=>{

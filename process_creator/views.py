@@ -336,4 +336,32 @@ def process_word(request, pk: int):
     response['Content-Disposition'] = f'attachment; filename="process-{process.id}.docx"'
     return response
 
+
+@login_required
+@require_app_access('process_creator', action='view')
+def process_stats(request, pk: int):
+    process = get_object_or_404(Process, pk=pk)
+    
+    # Calculate statistics
+    step_count = process.steps.count()
+    image_count = sum(step.images.count() for step in process.steps.all())
+    description_length = len(process.description) if process.description else 0
+    notes_length = len(process.notes) if process.notes else 0
+    
+    # Format dates
+    from django.utils import timezone
+    created_at = process.created_at.strftime('%B %d, %Y at %I:%M %p')
+    updated_at = process.updated_at.strftime('%B %d, %Y at %I:%M %p')
+    
+    stats = {
+        'created_at': created_at,
+        'updated_at': updated_at,
+        'step_count': step_count,
+        'image_count': image_count,
+        'description_length': description_length,
+        'notes_length': notes_length,
+    }
+    
+    return JsonResponse(stats)
+
 # Create your views here.

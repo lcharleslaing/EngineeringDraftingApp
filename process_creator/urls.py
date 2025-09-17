@@ -13,6 +13,7 @@ urlpatterns = [
     path("<int:pk>/copy/", views.process_copy_prompt, name="copy"),
     path("<int:pk>/pdf/", views.process_pdf, name="pdf"),
     path("<int:pk>/word/", views.process_word, name="word"),
+    path("<int:pk>/stats/", views.process_stats, name="stats"),
     # AJAX endpoints
     path("reorder/", views.processes_reorder, name="reorder"),
     path("<int:pk>/steps/reorder/", views.steps_reorder, name="steps_reorder"),
