@@ -439,6 +439,19 @@ def step_file_delete(request, pk: int, step_id: int, file_id: int):
 
 
 @login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def step_images_reorder(request, pk: int, step_id: int):
+    process = get_object_or_404(Process, pk=pk)
+    step = get_object_or_404(Step, pk=step_id, process=process)
+    order_list = request.POST.getlist("order[]")
+    with transaction.atomic():
+        for index, img_id in enumerate(order_list, start=1):
+            StepImage.objects.filter(step=step, id=img_id).update(order=index)
+    return JsonResponse({"ok": True})
+
+
+@login_required
 @require_app_access('process_creator', action='view')
 def process_pdf(request, pk: int):
     process = get_object_or_404(Process, pk=pk)
@@ -619,8 +632,21 @@ def process_stats(request, pk: int):
     
     total_steps = step_count + substep_count
     image_count = sum(step.images.count() for step in process.steps.all())
+    
+    # Calculate text lengths
     description_length = len(process.description) if process.description else 0
     notes_length = len(process.notes) if process.notes else 0
+    summary_length = len(process.summary) if process.summary else 0
+    analysis_length = len(process.analysis) if process.analysis else 0
+    
+    # Calculate total text length from all step details
+    step_details_length = 0
+    for step in process.steps.all():
+        if step.details:
+            step_details_length += len(step.details)
+    
+    # Total text length (all text content combined)
+    total_text_length = description_length + notes_length + summary_length + analysis_length + step_details_length
     
     # Format dates
     from django.utils import timezone
@@ -636,6 +662,10 @@ def process_stats(request, pk: int):
         'image_count': image_count,
         'description_length': description_length,
         'notes_length': notes_length,
+        'summary_length': summary_length,
+        'analysis_length': analysis_length,
+        'step_details_length': step_details_length,
+        'total_text_length': total_text_length,
     }
     
     return JsonResponse(stats)
