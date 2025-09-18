@@ -20,6 +20,8 @@ import re
 from decimal import Decimal
 from io import BytesIO
 from urllib.parse import quote
+import subprocess
+import tempfile
 
 
 def markdown_to_plain_text(text):
@@ -349,16 +351,80 @@ def step_link_delete(request, pk: int, step_id: int, link_id: int):
 @require_app_access('process_creator', action='edit')
 @require_POST
 def step_file_upload(request, pk: int, step_id: int):
-    process = get_object_or_404(Process, pk=pk)
-    step = get_object_or_404(Step, pk=step_id, process=process)
-    file = request.FILES.get('file')
-    if not file:
-        return JsonResponse({"ok": False, "error": "No file uploaded"}, status=400)
-    if not (file.content_type == 'application/pdf' or file.name.lower().endswith('.pdf')):
-        return JsonResponse({"ok": False, "error": "Only PDF files are supported"}, status=400)
-    max_order = step.files.aggregate(models.Max('order')).get('order__max') or 0
-    sf = StepFile.objects.create(step=step, file=file, order=max_order + 1)
-    return JsonResponse({"ok": True, "id": sf.id, "url": sf.file.url, "name": os.path.basename(sf.file.name)})
+    try:
+        process = get_object_or_404(Process, pk=pk)
+        step = get_object_or_404(Step, pk=step_id, process=process)
+        file = request.FILES.get('file')
+        if not file:
+            return JsonResponse({"ok": False, "error": "No file uploaded"}, status=200)
+        name_lower = file.name.lower()
+        max_order = step.files.aggregate(models.Max('order')).get('order__max') or 0
+
+        # Direct PDF: save as-is
+        if (file.content_type == 'application/pdf' or name_lower.endswith('.pdf')):
+            sf = StepFile.objects.create(step=step, file=file, order=max_order + 1)
+            return JsonResponse({"ok": True, "id": sf.id, "url": sf.file.url, "name": os.path.basename(sf.file.name)})
+
+        # DWG / IDW: try local conversion to PDF
+        is_dwg = name_lower.endswith('.dwg')
+        is_idw = name_lower.endswith('.idw')
+        if not (is_dwg or is_idw):
+            return JsonResponse({"ok": False, "error": "Only PDF, DWG or IDW files are supported"}, status=200)
+
+        # Persist the uploaded file temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.name)[1]) as tmp_in:
+            for chunk in file.chunks():
+                tmp_in.write(chunk)
+            tmp_in_path = tmp_in.name
+
+        tmp_out_fd, tmp_out_path = tempfile.mkstemp(suffix='.pdf')
+        os.close(tmp_out_fd)
+
+        if is_dwg:
+            exe = getattr(settings, 'ODA_CONVERTER_PDF', '')
+            if not exe or not os.path.exists(exe):
+                # Fallback: store the DWG as-is so it can be linked/downloaded
+                sf = StepFile.objects.create(step=step, file=file, order=max_order + 1)
+                return JsonResponse({"ok": True, "id": sf.id, "url": sf.file.url, "name": os.path.basename(sf.file.name)})
+            cmd = [exe, tmp_in_path, tmp_out_path]
+        else:
+            exe = getattr(settings, 'INVENTOR_IDW_TO_PDF', '')
+            if not exe or not os.path.exists(exe):
+                sf = StepFile.objects.create(step=step, file=file, order=max_order + 1)
+                return JsonResponse({"ok": True, "id": sf.id, "url": sf.file.url, "name": os.path.basename(sf.file.name)})
+            cmd = [exe, tmp_in_path, tmp_out_path]
+
+        completed = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False, timeout=120)
+        if completed.returncode != 0 or not os.path.exists(tmp_out_path) or os.path.getsize(tmp_out_path) == 0:
+            # On conversion failure, store original so user still gets a downloadable file
+            try:
+                os.unlink(tmp_out_path)
+            except Exception:
+                pass
+            sf = StepFile.objects.create(step=step, file=file, order=max_order + 1)
+            return JsonResponse({"ok": True, "id": sf.id, "url": sf.file.url, "name": os.path.basename(sf.file.name)})
+
+        with open(tmp_out_path, 'rb') as f_out:
+            from django.core.files.base import ContentFile
+            pdf_bytes = f_out.read()
+            pdf_name = os.path.splitext(file.name)[0] + '.pdf'
+            sf = StepFile.objects.create(step=step, order=max_order + 1)
+            sf.file.save(pdf_name, ContentFile(pdf_bytes), save=True)
+
+        return JsonResponse({"ok": True, "id": sf.id, "url": sf.file.url, "name": os.path.basename(sf.file.name)})
+    except Exception as e:
+        return JsonResponse({"ok": False, "error": str(e)}, status=200)
+    finally:
+        try:
+            if 'tmp_in_path' in locals() and os.path.exists(tmp_in_path):
+                os.unlink(tmp_in_path)
+        except Exception:
+            pass
+        try:
+            if 'tmp_out_path' in locals() and os.path.exists(tmp_out_path):
+                os.unlink(tmp_out_path)
+        except Exception:
+            pass
 
 
 @login_required

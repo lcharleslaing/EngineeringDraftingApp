@@ -1,5 +1,6 @@
 from django import template
 import re
+import os
 
 register = template.Library()
 
@@ -55,3 +56,10 @@ def markdown_to_html(text):
     text = re.sub(r'\n', '<br>', text)
     
     return text
+
+@register.filter
+def basename(value):
+    """Extract just the filename from a path"""
+    if not value:
+        return ""
+    return os.path.basename(value)

@@ -194,3 +194,8 @@ if _env_csrf:
 
 # OpenAI API Configuration
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+
+# Optional local CAD converters (Windows). Set full paths via environment if available.
+# Example: ODA_CONVERTER_PDF = r"C:\\Program Files\\ODA\\dwg2pdf.exe"
+ODA_CONVERTER_PDF = os.environ.get('ODA_CONVERTER_PDF', '')
+INVENTOR_IDW_TO_PDF = os.environ.get('INVENTOR_IDW_TO_PDF', '')
