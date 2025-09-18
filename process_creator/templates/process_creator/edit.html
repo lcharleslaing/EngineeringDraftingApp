@@ -87,6 +87,33 @@
                 </div>
               </div>
               <textarea class="step-details textarea textarea-bordered mt-3 h-24" placeholder="Details">{{ step.details }}</textarea>
+              <!-- Links -->
+              <div class="mt-3">
+                <div class="text-sm opacity-70 mb-1">Links</div>
+                <div class="flex flex-wrap gap-2" id="links-{{ step.id }}">
+                  {% for link in step.links.all %}
+                    <a href="{{ link.url }}" target="_blank" class="btn btn-outline btn-sm" data-link-id="{{ link.id }}">{{ link.title }}</a>
+                  {% endfor %}
+                </div>
+              </div>
+              <!-- PDFs -->
+              <div class="mt-3">
+                <div class="text-sm opacity-70 mb-1">PDFs (paste or drop PDFs)</div>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-2" id="pdfs-{{ step.id }}">
+                  {% for f in step.files.all %}
+                    <div class="relative group">
+                      <div class="rounded border w-full h-28 bg-base-300/30 flex items-center justify-center cursor-pointer pdf-thumb" data-url="{{ f.file.url }}" title="{{ f.file.name }}">
+                        <span class="text-xs">PDF</span>
+                      </div>
+                      <button class="btn btn-xs btn-error absolute top-1 right-1 opacity-0 group-hover:opacity-100 delete-pdf" data-step="{{ step.id }}" data-id="{{ f.id }}">✕</button>
+                    </div>
+                  {% endfor %}
+                </div>
+                <div class="mt-2 flex gap-2">
+                  <input type="file" accept="application/pdf" class="hidden" data-upload-pdf-step="{{ step.id }}" />
+                  <button type="button" class="btn btn-sm" data-open-pdf-upload="{{ step.id }}">Add PDF</button>
+                </div>
+              </div>
               <div class="mt-3 img-section">
                 <div class="text-sm opacity-70 mb-1">Screenshots (paste or drop images)</div>
                 <div class="grid grid-cols-2 md:grid-cols-3 gap-2" id="imgs-{{ step.id }}">
@@ -556,7 +583,18 @@ document.addEventListener('click', (e) => {
     const modalImg = document.getElementById('modal-image');
     // reset zoom/position
     currentScale = 1; offsetX = 0; offsetY = 0; applyTransform();
-    
+    // ensure image element is restored in stage
+    const stage = document.getElementById('zoom-stage');
+    stage.innerHTML = '';
+    const imgEl = document.createElement('img');
+    imgEl.id = 'modal-image';
+    imgEl.alt = 'Full size image';
+    imgEl.className = 'select-none cursor-move will-change-transform';
+    imgEl.style.width = '100%'; imgEl.style.height = '100%'; imgEl.style.objectFit = 'contain';
+    imgEl.style.transform = 'translate(0px,0px) scale(1)';
+    stage.appendChild(imgEl);
+    modalImgEl = imgEl;
+
     modalImg.src = imgSrc;
     modal.showModal();
   }
@@ -565,17 +603,66 @@ document.addEventListener('click', (e) => {
 // Image grid click handler removed - only "Add images" button opens file dialog
 
 // Paste handler on window - attach to nearest focused step card
-window.addEventListener('paste', async (e)=>{
+document.addEventListener('paste', async (e)=>{
   const items = e.clipboardData && e.clipboardData.items; if (!items) return;
-  let file = null; for (const it of items) { if (it.type.indexOf('image') !== -1) { file = it.getAsFile(); break; } }
-  if (!file) return;
+  let file = null; let urlText = null; let pdfFile = null;
+  const textPromise = new Promise(resolve=>{
+    let resolved = false;
+    for (const it of items) {
+      if (it.kind === 'string' && it.type === 'text/plain') {
+        it.getAsString(t=>{ if (!resolved){ urlText = t; resolved = true; resolve(); } });
+      }
+    }
+    // Fallback resolve quickly if no text item
+    setTimeout(()=>{ if (!resolved) resolve(); }, 0);
+  });
+  for (const it of items) {
+    if (it.type && it.type.indexOf('image') !== -1) { file = it.getAsFile(); }
+    if (it.type === 'application/pdf') { pdfFile = it.getAsFile(); }
+  }
+  await textPromise;
   // find focused step
   const active = document.activeElement.closest('.card');
   if (!active) return;
   const stepId = active.dataset.id;
-  const fd = new FormData(); fd.append('file', file);
-  const res = await fetch(base + 'steps/' + stepId + '/images/upload/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}, body: fd});
-  const data = await res.json(); if (data.ok) addThumb(stepId, data);
+  // If PDF pasted
+  if (pdfFile) {
+    const fd = new FormData(); fd.append('file', pdfFile);
+    const res = await fetch(base + 'steps/' + stepId + '/files/upload/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}, body: fd});
+    const data = await res.json();
+    if (data.ok) addPdfThumb(stepId, data);
+    return;
+  }
+  // If image pasted
+  if (file) {
+    const fd = new FormData(); fd.append('file', file);
+    const res = await fetch(base + 'steps/' + stepId + '/images/upload/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}, body: fd});
+    const data = await res.json(); if (data.ok) addThumb(stepId, data);
+    return;
+  }
+  // If plain text URL pasted into details
+  if (urlText && /^https?:\/\//i.test(urlText.trim())) {
+    // prevent the URL from being inserted in the textarea
+    e.preventDefault();
+    const targetTA = e.target.classList.contains('step-details') ? e.target : null;
+    const pastedUrl = urlText.trim();
+    openCreateLinkModal(pastedUrl, async ({title, url})=>{
+      const res = await fetch(base + 'steps/' + stepId + '/links/add/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken'), 'Content-Type':'application/json'}, body: JSON.stringify({title, url})});
+      const data = await res.json();
+      if (data.ok) {
+        addLinkButton(stepId, data);
+        if (targetTA) {
+          // remove any residual pasted text
+          const {selectionStart: s, selectionEnd: epos} = targetTA;
+          if (s != null && epos != null && s !== epos) {
+            const cur = targetTA.value; targetTA.value = cur.slice(0, s) + cur.slice(epos);
+          } else if (targetTA.value.includes(pastedUrl)) {
+            targetTA.value = targetTA.value.replace(pastedUrl, '');
+          }
+        }
+      }
+    });
+  }
 });
 
 // Delete image - use event delegation for all images
@@ -609,12 +696,106 @@ function addThumb(stepId, data){
   // Event listener is now handled by event delegation above
 }
 
+function addLinkButton(stepId, data){
+  const container = document.getElementById('links-'+stepId);
+  const a = document.createElement('a');
+  a.href = data.url; a.target = '_blank'; a.className = 'btn btn-outline btn-sm'; a.textContent = data.title;
+  container.appendChild(a);
+}
+
+function addPdfThumb(stepId, data){
+  const container = document.getElementById('pdfs-'+stepId);
+  const div = document.createElement('div');
+  div.className = 'relative group';
+  div.innerHTML = `<div class="rounded border w-full h-28 bg-base-300/30 flex items-center justify-center cursor-pointer pdf-thumb" data-url="${data.url}" title="${data.name}"><span class="text-xs">PDF</span></div><button class="btn btn-xs btn-error absolute top-1 right-1 opacity-0 group-hover:opacity-100 delete-pdf" data-step="${stepId}" data-id="${data.id}">✕</button>`;
+  container.appendChild(div);
+}
+
+// PDF upload button
+document.querySelectorAll('[data-open-pdf-upload]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const stepId = btn.getAttribute('data-open-pdf-upload');
+    const input = document.querySelector(`[data-upload-pdf-step="${stepId}"]`);
+    input.click();
+  });
+});
+
+document.querySelectorAll('[data-upload-pdf-step]').forEach(input=>{
+  input.addEventListener('change', async ()=>{
+    const stepId = input.getAttribute('data-upload-pdf-step');
+    const file = input.files[0]; if (!file) return;
+    const fd = new FormData(); fd.append('file', file);
+    const res = await fetch(base + 'steps/' + stepId + '/files/upload/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}, body: fd});
+    const data = await res.json(); if (data.ok) addPdfThumb(stepId, data);
+    input.value = '';
+  });
+});
+
+// PDF preview and delete
+document.addEventListener('click', async (e)=>{
+  const pdfDiv = e.target.closest('.pdf-thumb');
+  if (pdfDiv) {
+    const url = pdfDiv.getAttribute('data-url');
+    // reuse image modal to show PDF via iframe
+    const modal = document.getElementById('image-modal');
+    const stage = document.getElementById('zoom-stage');
+    stage.innerHTML = `<iframe src="${url}" class="w-full h-full" style="border:0"></iframe>`;
+    modal.showModal();
+    return;
+  }
+  const delBtn = e.target.closest('.delete-pdf');
+  if (delBtn) {
+    e.preventDefault(); e.stopPropagation();
+    const stepId = delBtn.getAttribute('data-step');
+    const id = delBtn.getAttribute('data-id');
+    await fetch(base + 'steps/' + stepId + '/files/' + id + '/delete/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}});
+    delBtn.closest('.relative').remove();
+  }
+});
+
+// Link creation modal
+function openCreateLinkModal(initialUrl, onSave){
+  let modal = document.getElementById('create-link-modal');
+  if (!modal) {
+    modal = document.createElement('dialog');
+    modal.id = 'create-link-modal';
+    modal.className = 'modal';
+    modal.innerHTML = `
+      <div class="modal-box">
+        <h3 class="font-bold text-lg mb-3">Create Link</h3>
+        <div class="form-control mb-2">
+          <label class="label"><span class="label-text">Button Label</span></label>
+          <input id="new-link-title" class="input input-bordered" placeholder="Link label" />
+        </div>
+        <div class="form-control mb-4">
+          <label class="label"><span class="label-text">URL</span></label>
+          <input id="new-link-url" class="input input-bordered" placeholder="https://..." />
+        </div>
+        <div class="modal-action">
+          <button id="create-link-cancel" class="btn btn-ghost">Cancel</button>
+          <button id="create-link-save" class="btn btn-primary">Create</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+  modal.showModal();
+  modal.querySelector('#new-link-title').value = '';
+  modal.querySelector('#new-link-url').value = initialUrl || '';
+  modal.querySelector('#create-link-cancel').onclick = ()=> modal.close();
+  modal.querySelector('#create-link-save').onclick = ()=>{
+    const title = modal.querySelector('#new-link-title').value.trim();
+    const url = modal.querySelector('#new-link-url').value.trim();
+    if (!title || !/^https?:\/\//i.test(url)) { showToast('Provide label and valid URL', 'error'); return; }
+    modal.close(); onSave && onSave({title, url});
+  };
+}
+
 // Zoom & Pan for image modal
 let currentScale = 1;
 let offsetX = 0, offsetY = 0;
 let isPanning = false, startX = 0, startY = 0;
 
-const modalImgEl = document.getElementById('modal-image');
+let modalImgEl = document.getElementById('modal-image');
 const zoomStage = document.getElementById('zoom-stage');
 
 function applyTransform(){

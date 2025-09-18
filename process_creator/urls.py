@@ -26,6 +26,11 @@ urlpatterns = [
     path("<int:pk>/steps/<int:step_id>/delete/", views.step_delete, name="step_delete"),
     path("<int:pk>/steps/<int:step_id>/images/upload/", views.step_image_upload, name="step_image_upload"),
     path("<int:pk>/steps/<int:step_id>/images/<int:image_id>/delete/", views.step_image_delete, name="step_image_delete"),
+    # Links & Files (PDF)
+    path("<int:pk>/steps/<int:step_id>/links/add/", views.step_link_add, name="step_link_add"),
+    path("<int:pk>/steps/<int:step_id>/links/<int:link_id>/delete/", views.step_link_delete, name="step_link_delete"),
+    path("<int:pk>/steps/<int:step_id>/files/upload/", views.step_file_upload, name="step_file_upload"),
+    path("<int:pk>/steps/<int:step_id>/files/<int:file_id>/delete/", views.step_file_delete, name="step_file_delete"),
     path("print-all/", views.process_print_all, name="print_all"),
     # Module management
     path("modules/create/", views.module_create, name="module_create"),

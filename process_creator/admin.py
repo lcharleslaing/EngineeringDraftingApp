@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Module, Process, Step, StepImage, AIInteraction
+from .models import Module, Process, Step, StepImage, StepLink, StepFile, AIInteraction
 
 
 @admin.register(Module)
@@ -21,6 +21,18 @@ class StepImageInline(admin.TabularInline):
     fields = ("order", "image")
     ordering = ("order",)
 
+class StepLinkInline(admin.TabularInline):
+    model = StepLink
+    extra = 0
+    fields = ("order", "title", "url")
+    ordering = ("order",)
+
+class StepFileInline(admin.TabularInline):
+    model = StepFile
+    extra = 0
+    fields = ("order", "file")
+    ordering = ("order",)
+
 
 @admin.register(Process)
 class ProcessAdmin(admin.ModelAdmin):
@@ -35,7 +47,7 @@ class StepAdmin(admin.ModelAdmin):
     list_display = ("process", "order", "title")
     list_filter = ("process",)
     ordering = ("process", "order")
-    inlines = [StepImageInline]
+    inlines = [StepImageInline, StepLinkInline, StepFileInline]
 
 
 @admin.register(AIInteraction)

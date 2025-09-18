@@ -69,6 +69,36 @@ class StepImage(models.Model):
         ordering = ["order", "id"]
 
 
+class StepLink(models.Model):
+    step = models.ForeignKey(Step, on_delete=models.CASCADE, related_name="links")
+    order = models.PositiveIntegerField(default=1)
+    title = models.CharField(max_length=255)
+    url = models.URLField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.title}"
+
+
+def step_file_upload_path(instance, filename: str) -> str:
+    return f"process_files/{instance.step.process_id}/step_{instance.step_id}/{filename}"
+
+
+class StepFile(models.Model):
+    step = models.ForeignKey(Step, on_delete=models.CASCADE, related_name="files")
+    order = models.PositiveIntegerField(default=1)
+    file = models.FileField(upload_to=step_file_upload_path)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self) -> str:
+        return f"File {self.id} for Step {self.step_id}"
+
 class AIInteraction(models.Model):
     INTERACTION_TYPES = [
         ('summary', 'Summary Generation'),

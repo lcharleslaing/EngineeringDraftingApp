@@ -8,7 +8,7 @@ from django.db import models
 from django.template.loader import render_to_string
 from django.conf import settings
 from django.utils import timezone
-from .models import Module, Process, Step, StepImage, AIInteraction
+from .models import Module, Process, Step, StepImage, StepLink, StepFile, AIInteraction
 from xhtml2pdf import pisa
 from docx import Document
 from docx.shared import Inches
@@ -315,6 +315,60 @@ def step_image_delete(request, pk: int, step_id: int, image_id: int):
     step = get_object_or_404(Step, pk=step_id, process=process)
     img = get_object_or_404(StepImage, pk=image_id, step=step)
     img.delete()
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def step_link_add(request, pk: int, step_id: int):
+    process = get_object_or_404(Process, pk=pk)
+    step = get_object_or_404(Step, pk=step_id, process=process)
+    data = json.loads(request.body or '{}') if request.headers.get('Content-Type','').startswith('application/json') else request.POST
+    title = (data.get('title') or '').strip()
+    url = (data.get('url') or '').strip()
+    if not title or not url:
+        return JsonResponse({"ok": False, "error": "Title and URL are required"}, status=400)
+    max_order = step.links.aggregate(models.Max('order')).get('order__max') or 0
+    link = StepLink.objects.create(step=step, title=title, url=url, order=max_order + 1)
+    return JsonResponse({"ok": True, "id": link.id, "title": link.title, "url": link.url})
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def step_link_delete(request, pk: int, step_id: int, link_id: int):
+    process = get_object_or_404(Process, pk=pk)
+    step = get_object_or_404(Step, pk=step_id, process=process)
+    link = get_object_or_404(StepLink, pk=link_id, step=step)
+    link.delete()
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def step_file_upload(request, pk: int, step_id: int):
+    process = get_object_or_404(Process, pk=pk)
+    step = get_object_or_404(Step, pk=step_id, process=process)
+    file = request.FILES.get('file')
+    if not file:
+        return JsonResponse({"ok": False, "error": "No file uploaded"}, status=400)
+    if not (file.content_type == 'application/pdf' or file.name.lower().endswith('.pdf')):
+        return JsonResponse({"ok": False, "error": "Only PDF files are supported"}, status=400)
+    max_order = step.files.aggregate(models.Max('order')).get('order__max') or 0
+    sf = StepFile.objects.create(step=step, file=file, order=max_order + 1)
+    return JsonResponse({"ok": True, "id": sf.id, "url": sf.file.url, "name": os.path.basename(sf.file.name)})
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def step_file_delete(request, pk: int, step_id: int, file_id: int):
+    process = get_object_or_404(Process, pk=pk)
+    step = get_object_or_404(Step, pk=step_id, process=process)
+    sf = get_object_or_404(StepFile, pk=file_id, step=step)
+    sf.delete()
     return JsonResponse({"ok": True})
 
 
