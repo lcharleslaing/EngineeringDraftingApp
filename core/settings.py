@@ -184,6 +184,9 @@ SESSION_COOKIE_SAMESITE = os.environ.get('DJANGO_SESSION_COOKIE_SAMESITE', 'Lax'
 CSRF_COOKIE_SECURE = os.environ.get('DJANGO_CSRF_COOKIE_SECURE', '0') == '1'
 SECURE_SSL_REDIRECT = os.environ.get('DJANGO_SECURE_SSL_REDIRECT', '0') == '1'
 
+# Allow same-origin embedding for PDF previews in iframes/objects
+X_FRAME_OPTIONS = 'SAMEORIGIN'
+
 # CSRF trusted origins can be provided as a comma-separated list of scheme+host[:port]
 _env_csrf = os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS')
 if _env_csrf:
