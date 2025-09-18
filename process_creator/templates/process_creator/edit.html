@@ -5,6 +5,15 @@
   <div class="max-w-7xl mx-auto px-1 sm:px-2 lg:px-4 py-3">
     <div class="flex items-center gap-3 mb-3">
       <input id="process-name" class="input input-bordered w-full" value="{{ process.name }}" placeholder="Process name" required />
+      <select id="process-module" class="select select-bordered w-full max-w-xs">
+        <option value="">No Module</option>
+        {% for module in modules %}
+          <option value="{{ module.id }}" {% if process.module and process.module.id == module.id %}selected{% endif %}>
+            {{ module.name }}
+          </option>
+        {% endfor %}
+        <option value="__new__">+ New Module…</option>
+      </select>
       <button id="stats-btn" class="btn btn-info btn-sm" data-process-id="{{ process.id }}">Stats</button>
     </div>
     <div class="flex items-center gap-2">
@@ -146,15 +155,12 @@
   </div>
 </dialog>
 
-<!-- Image Viewer Modal -->
+<!-- Image Viewer Modal (Full Screen) -->
 <dialog id="image-modal" class="modal">
-  <div class="modal-box w-11/12 max-w-4xl p-0">
-    <div class="flex items-center justify-between p-4 border-b">
-      <h3 class="font-bold text-lg">Image Viewer</h3>
-      <button class="btn btn-sm btn-circle btn-ghost" onclick="document.getElementById('image-modal').close()">✕</button>
-    </div>
-    <div class="p-4">
-      <img id="modal-image" src="" alt="Full size image" class="w-full h-auto max-h-[70vh] object-contain mx-auto" />
+  <div class="modal-box w-screen h-screen max-w-none max-h-none p-0 bg-base-100 relative">
+    <button class="btn btn-sm btn-circle btn-ghost absolute right-3 top-3 z-20" onclick="document.getElementById('image-modal').close()">✕</button>
+    <div id="zoom-stage" class="w-full h-full overflow-hidden bg-base-100">
+      <img id="modal-image" src="" alt="Full size image" class="select-none cursor-move will-change-transform" style="width:100%; height:100%; object-fit: contain; transform: translate(0px,0px) scale(1);" />
     </div>
   </div>
 </dialog>
@@ -207,6 +213,24 @@ document.getElementById('analysis-instructions').addEventListener('input', debou
 // Name change via simple submit to update endpoint
 document.getElementById('process-name').addEventListener('change', async (e)=>{
   await fetch(base + 'update/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}, body:new URLSearchParams({name:e.target.value})});
+});
+
+// Module change via simple submit to update endpoint
+document.getElementById('process-module').addEventListener('change', async (e)=>{
+  if (e.target.value === '__new__') {
+    openCreateModuleModal({ afterCreate: async (mod)=>{
+      // set selected
+      const sel = document.getElementById('process-module');
+      const opt = document.createElement('option'); opt.value = mod.id; opt.textContent = mod.name;
+      sel.insertBefore(opt, sel.querySelector('option[value="__new__"]'));
+      sel.value = mod.id;
+      await fetch(base + 'update/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}, body:new URLSearchParams({module:mod.id})});
+    }});
+    // restore current while modal open
+    e.target.value = '{{ process.module.id|default:"" }}';
+    return;
+  }
+  await fetch(base + 'update/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}, body:new URLSearchParams({module:e.target.value})});
 });
 
 // Add step
@@ -360,6 +384,14 @@ document.getElementById('stats-btn').addEventListener('click', async (e)=>{
                 <div class="badge badge-accent badge-lg">${data.step_count}</div>
               </div>
               <div class="flex justify-between items-center">
+                <span class="text-sm opacity-70">Substeps</span>
+                <div class="badge badge-secondary badge-lg">${data.substep_count || 0}</div>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-sm opacity-70">Total Steps</span>
+                <div class="badge badge-primary badge-lg">${data.total_steps || data.step_count}</div>
+              </div>
+              <div class="flex justify-between items-center">
                 <span class="text-sm opacity-70">Images</span>
                 <div class="badge badge-accent badge-lg">${data.image_count}</div>
               </div>
@@ -391,7 +423,7 @@ document.getElementById('stats-btn').addEventListener('click', async (e)=>{
             <div class="space-y-2">
               <div class="flex justify-between">
                 <span class="text-sm opacity-90">Total Content</span>
-                <span class="font-bold">${data.step_count + data.image_count} items</span>
+                <span class="font-bold">${(data.total_steps || data.step_count) + data.image_count} items</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-sm opacity-90">Text Length</span>
@@ -399,7 +431,7 @@ document.getElementById('stats-btn').addEventListener('click', async (e)=>{
               </div>
               <div class="divider my-2"></div>
               <div class="text-center">
-                <div class="text-2xl font-bold">${data.step_count > 0 ? Math.round(data.image_count / data.step_count * 10) / 10 : 0}</div>
+                <div class="text-2xl font-bold">${(data.total_steps || data.step_count) > 0 ? Math.round(data.image_count / (data.total_steps || data.step_count) * 10) / 10 : 0}</div>
                 <div class="text-sm opacity-90">images per step</div>
               </div>
             </div>
@@ -522,6 +554,8 @@ document.addEventListener('click', (e) => {
     const imgSrc = e.target.src;
     const modal = document.getElementById('image-modal');
     const modalImg = document.getElementById('modal-image');
+    // reset zoom/position
+    currentScale = 1; offsetX = 0; offsetY = 0; applyTransform();
     
     modalImg.src = imgSrc;
     modal.showModal();
@@ -575,6 +609,47 @@ function addThumb(stepId, data){
   // Event listener is now handled by event delegation above
 }
 
+// Zoom & Pan for image modal
+let currentScale = 1;
+let offsetX = 0, offsetY = 0;
+let isPanning = false, startX = 0, startY = 0;
+
+const modalImgEl = document.getElementById('modal-image');
+const zoomStage = document.getElementById('zoom-stage');
+
+function applyTransform(){
+  modalImgEl.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${currentScale})`;
+  modalImgEl.style.transformOrigin = 'center center';
+}
+
+zoomStage.addEventListener('wheel', (e)=>{
+  e.preventDefault();
+  const delta = e.deltaY;
+  const factor = delta > 0 ? 0.9 : 1.1;
+  const prevScale = currentScale;
+  currentScale = Math.min(10, Math.max(1, currentScale * factor));
+
+  // Zoom towards cursor: adjust offset based on cursor position
+  const rect = zoomStage.getBoundingClientRect();
+  const cx = e.clientX - rect.left - rect.width/2;
+  const cy = e.clientY - rect.top - rect.height/2;
+  offsetX = (offsetX - cx) * (currentScale/prevScale) + cx;
+  offsetY = (offsetY - cy) * (currentScale/prevScale) + cy;
+  applyTransform();
+}, { passive: false });
+
+modalImgEl.addEventListener('mousedown', (e)=>{
+  isPanning = true; startX = e.clientX - offsetX; startY = e.clientY - offsetY;
+});
+window.addEventListener('mousemove', (e)=>{
+  if (!isPanning) return;
+  offsetX = e.clientX - startX; offsetY = e.clientY - startY; applyTransform();
+});
+window.addEventListener('mouseup', ()=>{ isPanning = false; });
+
+// Double click to reset
+zoomStage.addEventListener('dblclick', ()=>{ currentScale = 1; offsetX = 0; offsetY = 0; applyTransform(); });
+
 // Insert step before/after with event delegation (more reliable)
 document.getElementById('steps').addEventListener('click', async (e)=>{
   const btn = e.target.closest('button[data-insert]');
@@ -597,6 +672,62 @@ document.getElementById('steps').addEventListener('click', async (e)=>{
     btn.disabled = false;
   }
 });
+</script>
+<script>
+// Reuse same modal helper as list page if absent
+function showToast(message, type = 'success') {
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-top toast-end';
+  toast.innerHTML = `<div class="alert alert-${type}"><span>${message}</span></div>`;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), type === 'error' ? 5000 : 3000);
+}
+function openCreateModuleModal({afterCreate}={}){
+  let modal = document.getElementById('create-module-modal');
+  if (!modal) {
+    modal = document.createElement('dialog');
+    modal.id = 'create-module-modal';
+    modal.className = 'modal';
+    modal.innerHTML = `
+      <div class="modal-box">
+        <h3 class="font-bold text-lg mb-3">Create Module</h3>
+        <div class="form-control mb-2">
+          <label class="label"><span class="label-text">Name</span></label>
+          <input id="new-module-name" class="input input-bordered" placeholder="e.g., Engineering/Drafting" />
+        </div>
+        <div class="form-control mb-4">
+          <label class="label"><span class="label-text">Description (optional)</span></label>
+          <textarea id="new-module-desc" class="textarea textarea-bordered" rows="3" placeholder="Short description"></textarea>
+        </div>
+        <div class="modal-action">
+          <button id="create-module-cancel" class="btn btn-ghost">Cancel</button>
+          <button id="create-module-save" class="btn btn-primary">Create</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+  modal.showModal();
+  modal.querySelector('#create-module-cancel').onclick = ()=> modal.close();
+  modal.querySelector('#create-module-save').onclick = async ()=>{
+    const name = modal.querySelector('#new-module-name').value.trim();
+    const description = modal.querySelector('#new-module-desc').value.trim();
+    if (!name) { showToast('Module name is required', 'error'); return; }
+    try {
+      const res = await fetch('{% url "process_creator:module_create" %}', {
+        method: 'POST', headers: {'X-CSRFToken': getCookie('csrftoken'), 'Content-Type': 'application/json'},
+        body: JSON.stringify({name, description})
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to create module');
+      modal.close();
+      showToast('Module created', 'success');
+      afterCreate && afterCreate({id: data.id, name: data.name});
+    } catch(err) {
+      console.error(err);
+      showToast(err.message, 'error');
+    }
+  };
+}
 </script>
 {% endblock %}
 

@@ -1,8 +1,22 @@
 from django.db import models
 
 
+class Module(models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class Process(models.Model):
     name = models.CharField(max_length=255)
+    module = models.ForeignKey(Module, on_delete=models.SET_NULL, null=True, blank=True, help_text="Module this process belongs to")
     order = models.PositiveIntegerField(default=1)
     summary = models.TextField(blank=True, help_text="Generated summary of the process")
     summary_instructions = models.TextField(

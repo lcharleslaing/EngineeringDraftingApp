@@ -13,6 +13,27 @@
   </div>
   </div>
 
+<!-- Module Filter -->
+<div class="mb-6">
+  <div class="flex items-center gap-4">
+    <label for="module-filter" class="text-sm font-medium">Filter by Module:</label>
+    <select id="module-filter" class="select select-bordered w-full max-w-xs">
+      <option value="">All Modules</option>
+      {% for module in modules %}
+        <option value="{{ module.id }}" {% if selected_module and selected_module.id == module.id %}selected{% endif %}>
+          {{ module.name }}
+        </option>
+      {% endfor %}
+      <option value="__new__">+ New Module…</option>
+    </select>
+    {% if selected_module %}
+      <div class="text-sm text-base-content/70">
+        Showing processes in: <strong>{{ selected_module.name }}</strong>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
 <div id="process-list" class="grid gap-3">
   {% for p in processes %}
     <div class="card bg-base-200 shadow-sm" data-id="{{ p.id }}">
@@ -198,6 +219,87 @@ document.getElementById('analyze-all').addEventListener('click', async ()=>{
   }
 });
 
+// Module filter
+document.getElementById('module-filter').addEventListener('change', (e) => {
+  const moduleId = e.target.value;
+  if (moduleId === '__new__') {
+    // Open create module modal
+    openCreateModuleModal({ afterCreate: (mod)=>{
+      // Insert new option and select it
+      const sel = document.getElementById('module-filter');
+      const opt = document.createElement('option');
+      opt.value = mod.id; opt.textContent = mod.name;
+      sel.insertBefore(opt, sel.querySelector('option[value="__new__"]'));
+      sel.value = mod.id;
+      // Navigate with module param
+      const url = new URL(window.location);
+      url.searchParams.set('module', mod.id);
+      window.location.href = url.toString();
+    }});
+    // Revert selection to previous while modal is open
+    const url = new URL(window.location);
+    const current = url.searchParams.get('module') || '';
+    e.target.value = current;
+    return;
+  }
+  const url = new URL(window.location);
+  if (moduleId) {
+    url.searchParams.set('module', moduleId);
+  } else {
+    url.searchParams.delete('module');
+  }
+  window.location.href = url.toString();
+});
+
+// Minimal create-module modal (DaisyUI)
+function openCreateModuleModal({afterCreate}={}){
+  let modal = document.getElementById('create-module-modal');
+  if (!modal) {
+    modal = document.createElement('dialog');
+    modal.id = 'create-module-modal';
+    modal.className = 'modal';
+    modal.innerHTML = `
+      <div class="modal-box">
+        <h3 class="font-bold text-lg mb-3">Create Module</h3>
+        <div class="form-control mb-2">
+          <label class="label"><span class="label-text">Name</span></label>
+          <input id="new-module-name" class="input input-bordered" placeholder="e.g., Engineering/Drafting" />
+        </div>
+        <div class="form-control mb-4">
+          <label class="label"><span class="label-text">Description (optional)</span></label>
+          <textarea id="new-module-desc" class="textarea textarea-bordered" rows="3" placeholder="Short description"></textarea>
+        </div>
+        <div class="modal-action">
+          <button id="create-module-cancel" class="btn btn-ghost">Cancel</button>
+          <button id="create-module-save" class="btn btn-primary">Create</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+  modal.showModal();
+  modal.querySelector('#create-module-cancel').onclick = ()=> modal.close();
+  modal.querySelector('#create-module-save').onclick = async ()=>{
+    const name = modal.querySelector('#new-module-name').value.trim();
+    const description = modal.querySelector('#new-module-desc').value.trim();
+    if (!name) { showToast('Module name is required', 'error'); return; }
+    try {
+      const res = await fetch('{% url "process_creator:module_create" %}', {
+        method: 'POST',
+        headers: {'X-CSRFToken': getCookie('csrftoken'), 'Content-Type': 'application/json'},
+        body: JSON.stringify({name, description})
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to create module');
+      modal.close();
+      showToast('Module created', 'success');
+      afterCreate && afterCreate({id: data.id, name: data.name});
+    } catch(err) {
+      console.error(err);
+      showToast(err.message, 'error');
+    }
+  };
+}
+
 // Export functions
 document.getElementById('export-pdf-all').addEventListener('click', ()=>{
   const ids = Array.from(document.querySelectorAll('#process-list .card'))
@@ -210,6 +312,13 @@ document.getElementById('export-pdf-all').addEventListener('click', ()=>{
   const selectedHistory = getSelectedHistoryItems();
   const params = new URLSearchParams(); 
   ids.forEach(id=>params.append('ids', id));
+  
+  // Add module filter if selected
+  const selectedModule = document.getElementById('module-filter').value;
+  if (selectedModule) {
+    params.append('module', selectedModule);
+  }
+  
   if (selectedHistory.length > 0) {
     params.append('include_history', 'true');
     params.append('history_data', JSON.stringify(selectedHistory));
@@ -228,6 +337,13 @@ document.getElementById('export-word-all').addEventListener('click', ()=>{
   const selectedHistory = getSelectedHistoryItems();
   const params = new URLSearchParams(); 
   ids.forEach(id=>params.append('ids', id));
+  
+  // Add module filter if selected
+  const selectedModule = document.getElementById('module-filter').value;
+  if (selectedModule) {
+    params.append('module', selectedModule);
+  }
+  
   if (selectedHistory.length > 0) {
     params.append('include_history', 'true');
     params.append('history_data', JSON.stringify(selectedHistory));

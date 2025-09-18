@@ -8,7 +8,7 @@ from django.db import models
 from django.template.loader import render_to_string
 from django.conf import settings
 from django.utils import timezone
-from .models import Process, Step, StepImage, AIInteraction
+from .models import Module, Process, Step, StepImage, AIInteraction
 from xhtml2pdf import pisa
 from docx import Document
 from docx.shared import Inches
@@ -54,8 +54,45 @@ def markdown_to_plain_text(text):
 @login_required
 @require_app_access('process_creator', action='view')
 def process_list(request):
-    processes = Process.objects.all()
-    return render(request, "process_creator/list.html", {"processes": processes})
+    # Get all modules for the dropdown
+    modules = Module.objects.all()
+    
+    # Get selected module from request
+    selected_module_id = request.GET.get('module')
+    selected_module = None
+    
+    if selected_module_id:
+        try:
+            selected_module = Module.objects.get(id=selected_module_id)
+            processes = Process.objects.filter(module=selected_module).order_by('order', 'name')
+        except Module.DoesNotExist:
+            processes = Process.objects.all().order_by('order', 'name')
+    else:
+        processes = Process.objects.all().order_by('order', 'name')
+    
+    return render(request, "process_creator/list.html", {
+        "processes": processes,
+        "modules": modules,
+        "selected_module": selected_module
+    })
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def module_create(request):
+    """Create a new Module via AJAX."""
+    data = json.loads(request.body or '{}') if request.headers.get('Content-Type','').startswith('application/json') else request.POST
+    name = (data.get('name') or '').strip()
+    description = (data.get('description') or '').strip()
+    if not name:
+        return JsonResponse({"ok": False, "error": "Name is required"}, status=400)
+    # Prevent duplicates (case-insensitive)
+    existing = Module.objects.filter(name__iexact=name).first()
+    if existing:
+        return JsonResponse({"ok": True, "id": existing.id, "name": existing.name})
+    module = Module.objects.create(name=name, description=description)
+    return JsonResponse({"ok": True, "id": module.id, "name": module.name})
 
 
 @login_required
@@ -70,7 +107,8 @@ def process_create(request):
 @require_app_access('process_creator', action='edit')
 def process_edit(request, pk: int):
     process = get_object_or_404(Process, pk=pk)
-    return render(request, "process_creator/edit.html", {"process": process})
+    modules = Module.objects.all()
+    return render(request, "process_creator/edit.html", {"process": process, "modules": modules})
 
 
 @login_required
@@ -85,6 +123,7 @@ def process_update(request, pk: int):
     summary_instructions = request.POST.get('summary_instructions')
     analysis = request.POST.get('analysis')
     analysis_instructions = request.POST.get('analysis_instructions')
+    module_id = request.POST.get('module')
     
     if name is not None:
         if not name.strip():
@@ -102,6 +141,14 @@ def process_update(request, pk: int):
         process.analysis = analysis
     if analysis_instructions is not None:
         process.analysis_instructions = analysis_instructions
+    if module_id is not None:
+        if module_id == '':
+            process.module = None
+        else:
+            try:
+                process.module = Module.objects.get(id=module_id)
+            except Module.DoesNotExist:
+                pass  # Keep existing module if invalid ID provided
     
     process.save()
     return JsonResponse({"ok": True})
@@ -442,6 +489,15 @@ def process_stats(request, pk: int):
     
     # Calculate statistics
     step_count = process.steps.count()
+    
+    # Count substeps (lines starting with -)
+    substep_count = 0
+    for step in process.steps.all():
+        if step.details:
+            # Count lines that start with - (substeps)
+            substep_count += len([line for line in step.details.split('\n') if line.strip().startswith('-')])
+    
+    total_steps = step_count + substep_count
     image_count = sum(step.images.count() for step in process.steps.all())
     description_length = len(process.description) if process.description else 0
     notes_length = len(process.notes) if process.notes else 0
@@ -455,6 +511,8 @@ def process_stats(request, pk: int):
         'created_at': created_at,
         'updated_at': updated_at,
         'step_count': step_count,
+        'substep_count': substep_count,
+        'total_steps': total_steps,
         'image_count': image_count,
         'description_length': description_length,
         'notes_length': notes_length,
@@ -837,7 +895,17 @@ def bulk_pdf(request):
     if not process_ids:
         return HttpResponse('No processes selected', status=400)
     
-    processes = Process.objects.filter(id__in=process_ids).order_by('order')
+    # Filter by module if specified
+    selected_module_id = request.GET.get('module')
+    if selected_module_id:
+        try:
+            selected_module = Module.objects.get(id=selected_module_id)
+            processes = Process.objects.filter(id__in=process_ids, module=selected_module).order_by('order')
+        except Module.DoesNotExist:
+            processes = Process.objects.filter(id__in=process_ids).order_by('order')
+    else:
+        processes = Process.objects.filter(id__in=process_ids).order_by('order')
+    
     if not processes.exists():
         return HttpResponse('No valid processes found', status=400)
     
@@ -898,7 +966,17 @@ def bulk_word(request):
     if not process_ids:
         return HttpResponse('No processes selected', status=400)
     
-    processes = Process.objects.filter(id__in=process_ids).order_by('order')
+    # Filter by module if specified
+    selected_module_id = request.GET.get('module')
+    if selected_module_id:
+        try:
+            selected_module = Module.objects.get(id=selected_module_id)
+            processes = Process.objects.filter(id__in=process_ids, module=selected_module).order_by('order')
+        except Module.DoesNotExist:
+            processes = Process.objects.filter(id__in=process_ids).order_by('order')
+    else:
+        processes = Process.objects.filter(id__in=process_ids).order_by('order')
+    
     if not processes.exists():
         return HttpResponse('No valid processes found', status=400)
     

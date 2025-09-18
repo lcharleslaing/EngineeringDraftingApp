@@ -1,5 +1,12 @@
 from django.contrib import admin
-from .models import Process, Step, StepImage, AIInteraction
+from .models import Module, Process, Step, StepImage, AIInteraction
+
+
+@admin.register(Module)
+class ModuleAdmin(admin.ModelAdmin):
+    list_display = ("name", "description", "created_at")
+    search_fields = ("name", "description")
+    ordering = ("name",)
 
 
 class StepInline(admin.TabularInline):
@@ -17,8 +24,9 @@ class StepImageInline(admin.TabularInline):
 
 @admin.register(Process)
 class ProcessAdmin(admin.ModelAdmin):
-    list_display = ("name", "updated_at")
-    search_fields = ("name",)
+    list_display = ("name", "module", "updated_at")
+    list_filter = ("module",)
+    search_fields = ("name", "module__name")
     inlines = [StepInline]
 
 
