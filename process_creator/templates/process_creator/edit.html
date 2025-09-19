@@ -4,7 +4,7 @@
 {% block extra_css %}
 {% endblock %}
 {% block content %}
-<div class="sticky top-0 z-10 bg-base-100/90 backdrop-blur border-b border-base-200 mb-6">
+<div class="sticky top-0 z-0 bg-base-100/90 backdrop-blur border-b border-base-200 mb-6">
   <div class="max-w-7xl mx-auto px-1 sm:px-2 lg:px-4 py-3">
     <div class="flex items-center gap-3 mb-3">
       <input id="process-name" class="input input-bordered w-full" value="{{ process.name }}" placeholder="Process name" required />
@@ -94,8 +94,8 @@
         {% for step in process.steps.all %}
           <div class="card bg-base-200 shadow-sm relative" data-id="{{ step.id }}">
             <!-- Step Number Circle -->
-            <div class="absolute -top-3 left-1/2 transform -translate-x-1/2 z-10">
-              <div class="w-8 h-8 rounded-full bg-primary text-primary-content flex items-center justify-center text-sm font-bold shadow-lg border-2 border-base-100">
+            <div class="absolute -top-3 left-1/2 transform -translate-x-1/2 z-20">
+              <div class="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm font-bold shadow-lg border-2 border-white">
                 {{ step.order }}
               </div>
             </div>
@@ -119,7 +119,7 @@
                   {% for link in step.links.all %}
                     <div class="relative group">
                       <a href="{{ link.url }}" target="_blank" class="btn btn-outline btn-sm" data-link-id="{{ link.id }}">{{ link.title }}</a>
-                      <button class="btn btn-xxs btn-error absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 delete-link" data-step="{{ step.id }}" data-id="{{ link.id }}">✕</button>
+                      <button class="btn btn-xs btn-error absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 delete-link text-xs w-4 h-4 min-h-0 p-0 flex items-center justify-center" data-step="{{ step.id }}" data-id="{{ link.id }}">✕</button>
                     </div>
                   {% endfor %}
                 </div>
@@ -351,7 +351,8 @@ function updateStepNumbers(){
   cards.forEach((card, index) => {
     const stepNumberCircle = card.querySelector('.absolute.-top-3');
     if (stepNumberCircle) {
-      stepNumberCircle.textContent = index + 1;
+      // Update the entire HTML to preserve formatting
+      stepNumberCircle.innerHTML = `<div class="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm font-bold shadow-lg border-2 border-white">${index + 1}</div>`;
     }
   });
 }
@@ -366,6 +367,20 @@ function updateImageNumbers(container){
       numberCircle.textContent = index + 1;
     }
   });
+  
+  // Save the new order to the server
+  const stepId = container.getAttribute('data-step-id');
+  if (stepId) {
+    const imgIds = images.map(img => img.getAttribute('data-img-id'));
+    const formData = new FormData();
+    imgIds.forEach(id => formData.append('order[]', id));
+    
+    fetch(base + 'steps/' + stepId + '/images/reorder/', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCookie('csrftoken') },
+      body: formData
+    }).catch(err => console.error('Failed to save image order:', err));
+  }
 }
 
 function saveOrder(){
@@ -888,6 +903,12 @@ document.addEventListener('click', async (e)=>{
       headers:{'X-CSRFToken': getCookie('csrftoken')}
     });
     deleteBtn.closest('.relative').remove();
+    
+    // Renumber remaining images after deletion
+    const container = document.getElementById(`imgs-${stepId}`);
+    if (container) {
+      updateImageNumbers(container);
+    }
   } catch(err) {
     console.error('Failed to delete image:', err);
   }
@@ -924,6 +945,10 @@ function addThumb(stepId, data){
   div.setAttribute('draggable', 'true');
   div.innerHTML = `<img src="${data.url}" class="rounded border object-cover w-full h-28" /><button class="btn btn-xs btn-error absolute top-1 right-1 opacity-0 group-hover:opacity-100 delete-img" data-step="${stepId}" data-id="${data.id}">✕</button><div class="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-secondary text-secondary-content flex items-center justify-center text-xs font-bold shadow-lg z-20 border border-base-100">${data.order || 1}</div>`;
   container.appendChild(div);
+  
+  // Renumber all images after adding new one
+  updateImageNumbers(container);
+  
   // Event listener is now handled by event delegation above
 }
 
@@ -945,7 +970,7 @@ function addLinkButton(stepId, data){
   const container = document.getElementById('links-'+stepId);
   const div = document.createElement('div');
   div.className = 'relative group';
-  div.innerHTML = `<a href="${data.url}" target="_blank" class="btn btn-outline btn-sm" data-link-id="${data.id}">${data.title}</a><button class="btn btn-xxs btn-error absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 delete-link" data-step="${stepId}" data-id="${data.id}">✕</button>`;
+  div.innerHTML = `<a href="${data.url}" target="_blank" class="btn btn-outline btn-sm" data-link-id="${data.id}">${data.title}</a><button class="btn btn-xs btn-error absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 delete-link text-xs w-4 h-4 min-h-0 p-0 flex items-center justify-center" data-step="${stepId}" data-id="${data.id}">✕</button>`;
   container.appendChild(div);
 }
 
@@ -1262,24 +1287,8 @@ document.addEventListener('drop', async (e) => {
   e.preventDefault();
   if (draggedImg) {
     const container = draggedImg.parentElement;
-    const stepId = container.getAttribute('data-step-id');
-    const imgIds = Array.from(container.querySelectorAll('.draggable-img')).map(img => img.getAttribute('data-img-id'));
-    
-    try {
-      const formData = new FormData();
-      imgIds.forEach(id => formData.append('order[]', id));
-      const res = await fetch(base + 'steps/' + stepId + '/images/reorder/', {
-        method: 'POST',
-        headers: { 'X-CSRFToken': getCookie('csrftoken') },
-        body: formData
-      });
-      if (res.ok) {
-        // Numbers are already updated in dragend, just confirm server update succeeded
-        console.log('Image order updated successfully');
-      }
-    } catch (err) {
-      console.error('Failed to reorder images:', err);
-    }
+    // Numbers and server update are handled in dragend event
+    console.log('Image drop completed');
   }
 });
 
