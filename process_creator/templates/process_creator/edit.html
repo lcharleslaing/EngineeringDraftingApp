@@ -5,19 +5,20 @@
 <style>
   .draggable-pill {
     cursor: grab;
-    transition: all 0.2s ease;
+    transition: all 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     user-select: none;
   }
   .draggable-pill:active {
     cursor: grabbing;
   }
   .draggable-pill.dragging {
-    transform: scale(0.95);
-    opacity: 0.3 !important;
+    transform: scale(0.99);
+    opacity: 0.8 !important;
+    transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
   .draggable-pill:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    box-shadow: 0 3px 12px rgba(0,0,0,0.1);
   }
   .drop-indicator {
     animation: pulse 1s infinite;
@@ -25,6 +26,153 @@
   @keyframes pulse {
     0%, 100% { opacity: 0.6; }
     50% { opacity: 1; }
+  }
+  
+  /* Compact Mode Styles */
+  .step-compact {
+    min-height: auto !important;
+    padding: 0.5rem !important;
+  }
+  .step-compact .card-body {
+    padding: 0.5rem !important;
+  }
+  .step-compact .step-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin: 0;
+    background: transparent !important;
+    border: none !important;
+    padding: 0.25rem 0.5rem !important;
+    color: inherit !important;
+  }
+  .step-compact .step-content {
+    display: none !important;
+  }
+  .step-compact .step-number-circle {
+    width: 1.5rem !important;
+    height: 1.5rem !important;
+    font-size: 0.75rem !important;
+  }
+  .step-compact .step-buttons {
+    display: none !important;
+  }
+  .step-compact .bullet-pills-container {
+    display: none !important;
+  }
+  .step-compact .toggle-textarea,
+  .step-compact .toggle-attachments {
+    display: none !important;
+  }
+  
+  /* Textarea Auto-resize */
+  .step-details {
+    width: 100% !important;
+    min-height: auto;
+    resize: none;
+    overflow: hidden;
+    height: auto;
+  }
+  
+  /* Drag handle styling */
+  .drag {
+    cursor: grab;
+  }
+  .drag:active {
+    cursor: grabbing;
+  }
+  
+  /* Step Navigation Sidebar */
+  #step-nav {
+    transition: all 0.3s ease;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    padding: 20px 0;
+  }
+  /* Line removed for cleaner look */
+  .step-nav-circles {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+  .step-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    transition: all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    padding: 4px 8px;
+    border-radius: 8px;
+    margin-bottom: 0;
+    position: relative;
+  }
+  .step-nav-item:hover {
+    background: rgba(59, 130, 246, 0.1);
+  }
+  .step-nav-circle {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #3b82f6;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    border: 2px solid white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    z-index: 10;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .step-nav-title {
+    color: #374151;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.3;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .step-nav-circle:hover {
+    background: #1d4ed8;
+    transform: scale(1.02);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+  }
+  .step-nav-circle.active {
+    background: #10b981;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+    transform: scale(1.01);
+  }
+  
+  /* Smooth transitions for step cards */
+  .step-card {
+    transition: all 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+  .step-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+  }
+  
+  /* Smooth transitions for buttons */
+  .btn {
+    transition: all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+  .btn:hover {
+    transform: translateY(-0.5px);
+  }
+  
+  /* Smooth transitions for form elements */
+  .input, .textarea, .select {
+    transition: all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+  .input:focus, .textarea:focus, .select:focus {
+    transform: scale(1.005);
   }
 </style>
 {% endblock %}
@@ -113,14 +261,26 @@
     <div class="col-span-12">
       <div class="flex items-center justify-between mb-2">
         <h2 class="font-semibold">Steps</h2>
-        <button id="add-step" class="btn btn-primary btn-sm">Add step</button>
+        <div class="flex gap-2">
+          <button id="add-step" class="btn btn-primary btn-sm">Add step</button>
+          <button id="compact-mode-toggle" class="btn btn-outline btn-sm">
+            <i class="fas fa-compress-alt mr-1"></i>Compact Mode
+          </button>
+        </div>
       </div>
+      
+      <!-- Step Navigation Sidebar -->
+      <div id="step-nav" class="fixed left-4 top-1/2 transform -translate-y-1/2 z-30 hidden">
+        <div class="step-nav-line"></div>
+        <div class="step-nav-circles"></div>
+      </div>
+      
       <div id="steps" class="space-y-6">
         {% for step in process.steps.all %}
-          <div class="card bg-base-200 shadow-sm relative" data-id="{{ step.id }}">
+          <div class="card bg-base-200 shadow-sm relative step-card" data-id="{{ step.id }}">
             <!-- Step Number Circle -->
             <div class="absolute -top-3 left-1/2 transform -translate-x-1/2 z-20">
-              <div class="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm font-bold shadow-lg border-2 border-white">
+              <div class="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm font-bold shadow-lg border-2 border-white step-number-circle">
                 {{ step.order }}
               </div>
             </div>
@@ -130,7 +290,7 @@
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4h4v2h-4V4zm0 14h4v2h-4v-2zM4 10h2v4H4v-4zm14 0h2v4h-2v-4z"/></svg>
                 </span>
                 <input class="step-title input input-sm input-bordered flex-1" value="{{ step.title }}" required />
-                <div class="flex gap-1">
+                <div class="flex gap-1 step-buttons">
                   <button class="btn btn-sm" data-insert="up" title="Add before">+ ☝️</button>
                   <button class="btn btn-sm" data-insert="down" title="Add after">+ 👇</button>
                   <button class="btn btn-sm btn-error step-delete">Delete</button>
@@ -142,16 +302,9 @@
                 <div class="space-y-1" id="pills-list-{{ step.id }}">
                   <!-- Pills will be dynamically added here -->
                 </div>
-                <div class="mt-2 flex flex-wrap gap-2">
-                  <button class="btn btn-sm btn-outline toggle-textarea" data-step="{{ step.id }}">
-                    <span class="toggle-text">Edit Text</span>
-                  </button>
-                  <button class="btn btn-sm btn-outline toggle-attachments" data-step="{{ step.id }}">
-                    <span class="toggle-text">Show Attachments</span>
-                  </button>
-                </div>
               </div>
-              <textarea class="step-details textarea textarea-bordered mt-3 h-24 auto-resize" placeholder="Details (use - for bullet points)" style="display: none;">{{ step.details }}</textarea>
+              <div class="step-content">
+                <textarea class="step-details textarea textarea-bordered mt-3 auto-resize" placeholder="Details (use - for bullet points)" style="display: none;">{{ step.details }}</textarea>
               <!-- Links -->
               <div class="mt-3 step-attachments" id="attachments-{{ step.id }}" style="display: none;">
                 <div class="text-sm opacity-70 mb-1">Links</div>
@@ -200,6 +353,15 @@
                   <button type="button" class="btn btn-sm" data-open-upload="{{ step.id }}">Add images</button>
                   <input type="file" accept="image/*" multiple class="hidden" data-upload-step="{{ step.id }}" />
                 </div>
+              </div>
+              </div>
+              <div class="mt-2 flex flex-wrap gap-2">
+                <button class="btn btn-sm btn-outline toggle-textarea" data-step="{{ step.id }}">
+                  <span class="toggle-text">Edit Text</span>
+                </button>
+                <button class="btn btn-sm btn-outline toggle-attachments" data-step="{{ step.id }}">
+                  <span class="toggle-text">Show Attachments</span>
+                </button>
               </div>
             </div>
           </div>
@@ -342,6 +504,10 @@ document.getElementById('process-module').addEventListener('change', async (e)=>
 // Add step
 document.getElementById('add-step').addEventListener('click', async ()=>{
   const data = await post(base + 'steps/add/', {title:'New Step'});
+  
+  // Set a flag to scroll to new step after reload
+  sessionStorage.setItem('scrollToNewStep', 'true');
+  
   location.reload();
 });
 
@@ -350,6 +516,8 @@ document.querySelectorAll('#steps .card').forEach(card=>{
   const id = card.dataset.id;
   card.querySelector('.step-title').addEventListener('change', e=>{
     post(base + 'steps/' + id + '/update/', {title:e.target.value});
+    // Update navigation title immediately
+    updateNavigationTitle(id, e.target.value);
   });
   const textarea = card.querySelector('.step-details');
   textarea.addEventListener('input', ()=>{
@@ -419,26 +587,56 @@ document.querySelectorAll('#steps .card').forEach(card=>{
 
 // Drag and drop ordering
 let dragEl = null;
-document.querySelectorAll('#steps .card .drag').forEach(handle=>{
-  const card = handle.closest('.card');
-  card.draggable = true;
-  card.addEventListener('dragstart', ()=>{ dragEl = card; card.classList.add('opacity-50'); });
-  card.addEventListener('dragend', ()=>{ 
-    card.classList.remove('opacity-50'); 
-    dragEl = null; 
-    updateStepNumbers(); // Update numbers immediately
-    saveOrder(); 
+
+// Initialize drag and drop when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('Setting up drag and drop...');
+  const dragHandles = document.querySelectorAll('#steps .card .drag');
+  console.log('Found drag handles:', dragHandles.length);
+  
+  dragHandles.forEach(handle => {
+    const card = handle.closest('.card');
+    if (card) {
+      card.draggable = true;
+      console.log('Made card draggable:', card.dataset.id);
+      
+      card.addEventListener('dragstart', (e) => {
+        console.log('Drag started');
+        dragEl = card;
+        card.style.transition = 'all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+        card.classList.add('opacity-70');
+        card.style.transform = 'scale(0.99)';
+      });
+      
+      card.addEventListener('dragend', (e) => {
+        console.log('Drag ended');
+        card.style.transition = 'all 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+        card.classList.remove('opacity-70');
+        card.style.transform = 'scale(1)';
+        dragEl = null;
+        updateStepNumbers(); // Update numbers immediately
+        updateStepNavigation(); // Update navigation
+        saveOrder();
+      });
+    }
   });
 });
 
-document.getElementById('steps').addEventListener('dragover', (e)=>{
-  e.preventDefault();
-  const container = e.currentTarget;
-  const afterEl = Array.from(container.querySelectorAll('.card')).find(el=>{
-    const rect = el.getBoundingClientRect();
-    return e.clientY < rect.top + rect.height/2;
-  });
-  if (!afterEl) container.appendChild(dragEl); else container.insertBefore(dragEl, afterEl);
+// Set up dragover and drop events
+document.addEventListener('DOMContentLoaded', function() {
+  const stepsContainer = document.getElementById('steps');
+  if (stepsContainer) {
+    stepsContainer.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      const container = e.currentTarget;
+      const afterEl = Array.from(container.querySelectorAll('.card')).find(el => {
+        const rect = el.getBoundingClientRect();
+        return e.clientY < rect.top + rect.height / 2;
+      });
+      if (!afterEl) container.appendChild(dragEl); 
+      else container.insertBefore(dragEl, afterEl);
+    });
+  }
 });
 
 function updateStepNumbers(){
@@ -1636,6 +1834,348 @@ function openCreateModuleModal({afterCreate}={}){
     }
   };
 }
+
+// Compact Mode Toggle
+let isCompactMode = localStorage.getItem('compactMode') === 'true' || false;
+let wasInCompactModeBeforeDrag = false;
+
+// Initialize compact mode on page load
+document.addEventListener('DOMContentLoaded', function() {
+  if (isCompactMode) {
+    toggleCompactMode(true);
+    document.getElementById('compact-mode-toggle').innerHTML = '<i class="fas fa-expand-alt mr-1"></i>Normal Mode';
+  }
+  
+  // Auto-resize all textareas on page load
+  document.querySelectorAll('.step-details').forEach(textarea => {
+    textarea.style.height = 'auto';
+    textarea.style.height = textarea.scrollHeight + 'px';
+  });
+  
+  // Initialize step navigation
+  initializeStepNavigation();
+  
+  // Check if we need to scroll to a new step
+  if (sessionStorage.getItem('scrollToNewStep') === 'true') {
+    sessionStorage.removeItem('scrollToNewStep');
+    
+    // Wait a bit for everything to load, then scroll to the last step
+    setTimeout(() => {
+      const steps = document.querySelectorAll('#steps .step-card');
+      const lastStep = steps[steps.length - 1];
+      if (lastStep) {
+        // Scroll to the new step
+        lastStep.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        });
+        
+        // Focus the title input after scrolling
+        setTimeout(() => {
+          const titleInput = lastStep.querySelector('.step-title');
+          if (titleInput) {
+            titleInput.focus();
+            titleInput.select(); // Select all text for easy editing
+          }
+        }, 500);
+      }
+    }, 200);
+  }
+});
+
+document.getElementById('compact-mode-toggle').addEventListener('click', function() {
+  isCompactMode = !isCompactMode;
+  localStorage.setItem('compactMode', isCompactMode);
+  toggleCompactMode(isCompactMode);
+  this.innerHTML = isCompactMode ? 
+    '<i class="fas fa-expand-alt mr-1"></i>Normal Mode' : 
+    '<i class="fas fa-compress-alt mr-1"></i>Compact Mode';
+});
+
+function toggleCompactMode(compact) {
+  const stepCards = document.querySelectorAll('.step-card');
+  stepCards.forEach(card => {
+    if (compact) {
+      card.classList.add('step-compact');
+    } else {
+      card.classList.remove('step-compact');
+    }
+  });
+}
+
+// Step Navigation Functions
+function initializeStepNavigation() {
+  const stepNav = document.getElementById('step-nav');
+  const steps = document.querySelectorAll('#steps .step-card');
+  
+  if (steps.length === 0) {
+    stepNav.classList.add('hidden');
+    return;
+  }
+  
+  // Show navigation
+  stepNav.classList.remove('hidden');
+  
+  // Create circles for each step
+  const circlesContainer = stepNav.querySelector('.step-nav-circles');
+  circlesContainer.innerHTML = '';
+  
+  steps.forEach((step, index) => {
+    // Create navigation item container
+    const navItem = document.createElement('div');
+    navItem.className = 'step-nav-item';
+    navItem.dataset.stepId = step.dataset.id;
+    navItem.dataset.stepIndex = index;
+    
+    // Create circle
+    const circle = document.createElement('div');
+    circle.className = 'step-nav-circle';
+    circle.textContent = index + 1;
+    
+    // Create title
+    const title = document.createElement('div');
+    title.className = 'step-nav-title';
+    const stepTitle = step.querySelector('.step-title');
+    title.textContent = stepTitle ? stepTitle.value || stepTitle.textContent : `Step ${index + 1}`;
+    
+    // Assemble the item
+    navItem.appendChild(circle);
+    navItem.appendChild(title);
+    
+    // Click to scroll to step
+    navItem.addEventListener('click', () => {
+      scrollToStep(step);
+    });
+    
+    circlesContainer.appendChild(navItem);
+  });
+  
+  // Adjust spacing based on number of steps
+  adjustNavigationSpacing(steps.length);
+  
+  // Set up scroll spy to highlight active step
+  setupScrollSpy();
+  
+  // Set up smart viewport for many steps
+  setupSmartViewport();
+  
+  // Add scroll event listener as backup
+  setupScrollListener();
+}
+
+function adjustNavigationSpacing(stepCount) {
+  const circlesContainer = document.querySelector('.step-nav-circles');
+  const navItems = circlesContainer.querySelectorAll('.step-nav-item');
+  
+  // Much closer spacing to fit more steps
+  let gap = 0;
+  if (stepCount <= 5) gap = 8;
+  else if (stepCount <= 10) gap = 6;
+  else if (stepCount <= 15) gap = 4;
+  else gap = 2;
+  
+  navItems.forEach((item, index) => {
+    item.style.marginBottom = `${gap}px`;
+  });
+}
+
+function scrollToStep(stepElement) {
+  stepElement.scrollIntoView({ 
+    behavior: 'smooth', 
+    block: 'center' 
+  });
+}
+
+function setupScrollSpy() {
+  const steps = document.querySelectorAll('#steps .step-card');
+  const navItems = document.querySelectorAll('.step-nav-item');
+  
+  // Create intersection observer with more sensitive settings
+  const observer = new IntersectionObserver((entries) => {
+    // Find the step that's most visible (highest intersection ratio)
+    let mostVisible = null;
+    let highestRatio = 0;
+    
+    entries.forEach(entry => {
+      if (entry.isIntersecting && entry.intersectionRatio > highestRatio) {
+        highestRatio = entry.intersectionRatio;
+        mostVisible = entry.target;
+      }
+    });
+    
+    // If we have a most visible step, update the navigation
+    if (mostVisible) {
+      const stepId = mostVisible.dataset.id;
+      const navItem = document.querySelector(`.step-nav-item[data-step-id="${stepId}"]`);
+      
+      // Remove active class from all nav items
+      navItems.forEach(item => {
+        item.classList.remove('active');
+        item.querySelector('.step-nav-circle').classList.remove('active');
+      });
+      
+      // Add active class to current nav item
+      if (navItem) {
+        navItem.classList.add('active');
+        navItem.querySelector('.step-nav-circle').classList.add('active');
+        
+        // Update smart viewport to show this step
+        const activeIndex = parseInt(navItem.dataset.stepIndex);
+        const screenHeight = window.innerHeight;
+        const availableHeight = screenHeight - 120;
+        const itemHeight = 40;
+        const maxVisible = Math.floor(availableHeight / itemHeight);
+        const startIndex = Math.max(0, activeIndex - Math.floor(maxVisible / 2));
+        const endIndex = Math.min(navItems.length - 1, startIndex + maxVisible - 1);
+        showStepsInRange(startIndex, endIndex);
+      }
+    }
+  }, {
+    threshold: [0.1, 0.3, 0.5, 0.7, 0.9], // Multiple thresholds for better detection
+    rootMargin: '-10% 0px -10% 0px' // Smaller margin for more responsive detection
+  });
+  
+  // Observe all steps
+  steps.forEach(step => observer.observe(step));
+}
+
+// Update navigation when steps are reordered
+function updateStepNavigation() {
+  initializeStepNavigation();
+}
+
+// Update navigation title when step title changes
+function updateNavigationTitle(stepId, newTitle) {
+  const navItem = document.querySelector(`.step-nav-item[data-step-id="${stepId}"]`);
+  if (navItem) {
+    const titleElement = navItem.querySelector('.step-nav-title');
+    if (titleElement) {
+      titleElement.textContent = newTitle;
+    }
+  }
+}
+
+// Smart viewport - show only relevant steps around current one
+function setupSmartViewport() {
+  const navItems = document.querySelectorAll('.step-nav-item');
+  
+  // Calculate max visible based on screen height
+  const screenHeight = window.innerHeight;
+  const availableHeight = screenHeight - 120; // Account for padding
+  const itemHeight = 40; // Approximate height of each nav item
+  const maxVisible = Math.floor(availableHeight / itemHeight);
+  
+  if (navItems.length <= maxVisible) {
+    // Show all if we have few steps
+    navItems.forEach(item => item.style.display = 'flex');
+    return;
+  }
+  
+  // Initially show first few steps
+  showStepsInRange(0, maxVisible - 1);
+  
+  // Update viewport when active step changes
+  const observer = new MutationObserver(() => {
+    const activeItem = document.querySelector('.step-nav-item.active');
+    if (activeItem) {
+      const activeIndex = parseInt(activeItem.dataset.stepIndex);
+      const startIndex = Math.max(0, activeIndex - Math.floor(maxVisible / 2));
+      const endIndex = Math.min(navItems.length - 1, startIndex + maxVisible - 1);
+      showStepsInRange(startIndex, endIndex);
+    }
+  });
+  
+  // Watch for active class changes
+  navItems.forEach(item => {
+    observer.observe(item, { attributes: true, attributeFilter: ['class'] });
+  });
+}
+
+function showStepsInRange(startIndex, endIndex) {
+  const navItems = document.querySelectorAll('.step-nav-item');
+  navItems.forEach((item, index) => {
+    if (index >= startIndex && index <= endIndex) {
+      item.style.display = 'flex';
+      item.style.opacity = '0';
+      item.style.transform = 'translateX(-5px)';
+      // Very gentle fade in
+      setTimeout(() => {
+        item.style.transition = 'all 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+        item.style.opacity = '1';
+        item.style.transform = 'translateX(0)';
+      }, 20);
+    } else {
+      // Very gentle fade out
+      item.style.transition = 'all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+      item.style.opacity = '0';
+      item.style.transform = 'translateX(-5px)';
+      setTimeout(() => {
+        item.style.display = 'none';
+      }, 600);
+    }
+  });
+}
+
+// Scroll listener as backup for scroll spy
+function setupScrollListener() {
+  let scrollTimeout;
+  
+  window.addEventListener('scroll', () => {
+    // Throttle scroll events
+    clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(() => {
+      const steps = document.querySelectorAll('#steps .step-card');
+      const navItems = document.querySelectorAll('.step-nav-item');
+      
+      let closestStep = null;
+      let closestDistance = Infinity;
+      
+      // Find the step closest to the center of the viewport
+      steps.forEach(step => {
+        const rect = step.getBoundingClientRect();
+        const viewportCenter = window.innerHeight / 2;
+        const stepCenter = rect.top + (rect.height / 2);
+        const distance = Math.abs(stepCenter - viewportCenter);
+        
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestStep = step;
+        }
+      });
+      
+      // Update navigation if we found a closest step
+      if (closestStep) {
+        const stepId = closestStep.dataset.id;
+        const navItem = document.querySelector(`.step-nav-item[data-step-id="${stepId}"]`);
+        
+        if (navItem && !navItem.classList.contains('active')) {
+          // Remove active class from all nav items
+          navItems.forEach(item => {
+            item.classList.remove('active');
+            item.querySelector('.step-nav-circle').classList.remove('active');
+          });
+          
+          // Add active class to current nav item
+          navItem.classList.add('active');
+          navItem.querySelector('.step-nav-circle').classList.add('active');
+          
+          // Update smart viewport
+          const activeIndex = parseInt(navItem.dataset.stepIndex);
+          const screenHeight = window.innerHeight;
+          const availableHeight = screenHeight - 120;
+          const itemHeight = 40;
+          const maxVisible = Math.floor(availableHeight / itemHeight);
+          const startIndex = Math.max(0, activeIndex - Math.floor(maxVisible / 2));
+          const endIndex = Math.min(navItems.length - 1, startIndex + maxVisible - 1);
+          showStepsInRange(startIndex, endIndex);
+        }
+      }
+    }, 50); // 50ms throttle
+  });
+}
+
+// Auto-compact mode during dragging - REMOVED
+// Users can manually toggle compact mode if needed for reordering
 </script>
 {% endblock %}
 
