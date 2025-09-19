@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Process Creator{% endblock %}</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- DaisyUI -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.4.24/dist/full.min.css" rel="stylesheet" type="text/css" />
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.3.136/pdf.min.js"></script>
+    
+    <style>
+        /* Custom styles for the Process Creator */
+        .auto-resize {
+            resize: none;
+            overflow: hidden;
+        }
+        
+        .draggable-img {
+            cursor: move;
+        }
+        
+        .draggable-img:hover {
+            transform: scale(1.02);
+            transition: transform 0.2s ease;
+        }
+        
+        .toast {
+            z-index: 9999;
+        }
+        
+        /* Print styles */
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            
+            body {
+                font-size: 12pt;
+                line-height: 1.4;
+            }
+            
+            .print-content {
+                margin: 0;
+                padding: 0;
+            }
+            
+            .print-content h1 {
+                font-size: 18pt;
+                margin-bottom: 12pt;
+            }
+            
+            .print-content h2 {
+                font-size: 14pt;
+                margin-top: 12pt;
+                margin-bottom: 8pt;
+            }
+            
+            .print-content h3 {
+                font-size: 12pt;
+                margin-top: 8pt;
+                margin-bottom: 6pt;
+            }
+            
+            .print-content p {
+                margin-bottom: 6pt;
+            }
+            
+            .print-content ul, .print-content ol {
+                margin-bottom: 8pt;
+            }
+            
+            .print-content li {
+                margin-bottom: 3pt;
+            }
+        }
+    </style>
+</head>
+<body class="bg-base-200">
+    <!-- Navigation -->
+    <div class="navbar bg-base-100 shadow-lg">
+        <div class="flex-1">
+            <a href="{% url 'process_creator:list' %}" class="btn btn-ghost text-xl">
+                <i class="fas fa-cogs mr-2"></i>
+                Process Creator
+            </a>
+        </div>
+        <div class="flex-none">
+            <div class="dropdown dropdown-end">
+                <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar">
+                    <div class="w-10 rounded-full">
+                        <i class="fas fa-user text-2xl"></i>
+                    </div>
+                </div>
+                <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
+                    <li><a href="{% url 'admin:index' %}"><i class="fas fa-cog mr-2"></i>Admin</a></li>
+                    <li><a href="{% url 'admin:logout' %}"><i class="fas fa-sign-out-alt mr-2"></i>Logout</a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-8">
+        {% block content %}
+        {% endblock %}
+    </main>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast toast-bottom toast-end"></div>
+
+    <!-- Scripts -->
+    <script>
+        // Initialize PDF.js
+        if (window['pdfjsLib']) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.3.136/pdf.worker.min.js';
+        }
+
+        // Toast notification system
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `alert alert-${type} toast w-auto max-w-md whitespace-normal`;
+            toast.innerHTML = `
+                <span>${message}</span>
+                <button class="btn btn-sm btn-circle btn-ghost" onclick="this.parentElement.remove()">✕</button>
+            `;
+            
+            const container = document.getElementById('toast-container');
+            container.appendChild(toast);
+            
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                if (toast.parentElement) {
+                    toast.remove();
+                }
+            }, 5000);
+        }
+
+        // CSRF Token helper
+        function getCookie(name) {
+            const value = `; ${document.cookie}`.split(`; ${name}=`).pop();
+            return value ? value.split(';').shift() : '';
+        }
+
+        // Auto-resize textareas
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.max(textarea.scrollHeight, textarea.getAttribute('data-min-height') || 0) + 'px';
+        }
+
+        // Initialize auto-resize for all textareas
+        document.addEventListener('DOMContentLoaded', function() {
+            const textareas = document.querySelectorAll('.auto-resize');
+            textareas.forEach(textarea => {
+                // Store the minimum height
+                const minHeight = textarea.offsetHeight;
+                textarea.setAttribute('data-min-height', minHeight);
+                
+                // Set initial height
+                autoResize(textarea);
+                
+                // Add event listeners
+                textarea.addEventListener('input', () => autoResize(textarea));
+                textarea.addEventListener('paste', () => {
+                    setTimeout(() => autoResize(textarea), 10);
+                });
+            });
+            
+            // Watch for dynamically added textareas
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    mutation.addedNodes.forEach((node) => {
+                        if (node.nodeType === 1) { // Element node
+                            if (node.classList && node.classList.contains('auto-resize')) {
+                                initAutoResize(node);
+                            }
+                            const textareas = node.querySelectorAll && node.querySelectorAll('.auto-resize');
+                            if (textareas) {
+                                textareas.forEach(textarea => initAutoResize(textarea));
+                            }
+                        }
+                    });
+                });
+            });
+            
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        });
+
+        // Function to initialize auto-resize for a specific textarea
+        function initAutoResize(textarea) {
+            if (textarea.classList.contains('auto-resize')) {
+                const minHeight = textarea.offsetHeight;
+                textarea.setAttribute('data-min-height', minHeight);
+                autoResize(textarea);
+                
+                textarea.addEventListener('input', () => autoResize(textarea));
+                textarea.addEventListener('paste', () => {
+                    setTimeout(() => autoResize(textarea), 10);
+                });
+            }
+        }
+    </script>
+
+    {% block extra_js %}
+    {% endblock %}
+</body>
+</html>

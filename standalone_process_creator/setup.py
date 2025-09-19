@@ -1,0 +1,35 @@
+from setuptools import setup, find_packages
+
+setup(
+    name="django-process-creator",
+    version="1.0.0",
+    description="A comprehensive Django app for creating, managing, and documenting business processes with AI-powered analysis",
+    long_description=open("README.md").read(),
+    long_description_content_type="text/markdown",
+    author="Process Creator Team",
+    packages=find_packages(),
+    include_package_data=True,
+    install_requires=[
+        "django>=5.2.0",
+        "openai>=1.0.0",
+        "xhtml2pdf>=0.2.11",
+        "python-docx>=0.8.11",
+        "pillow>=10.0.0",
+        "python-dotenv>=1.0.0",
+    ],
+    classifiers=[
+        "Development Status :: 5 - Production/Stable",
+        "Intended Audience :: Developers",
+        "License :: OSI Approved :: MIT License",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Framework :: Django",
+        "Framework :: Django :: 5.2",
+    ],
+    python_requires=">=3.8",
+)

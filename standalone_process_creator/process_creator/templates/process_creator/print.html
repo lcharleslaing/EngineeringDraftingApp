@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ process.name }} - Process Document</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        
+        .print-content {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #bdc3c7;
+            padding-bottom: 5px;
+        }
+        
+        h3 {
+            color: #2c3e50;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        
+        .step {
+            margin-bottom: 25px;
+            padding: 15px;
+            border-left: 4px solid #3498db;
+            background-color: #f8f9fa;
+        }
+        
+        .step-title {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        
+        .step-details {
+            margin-left: 10px;
+        }
+        
+        .summary, .analysis {
+            background-color: #ecf0f1;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        
+        .summary h2, .analysis h2 {
+            color: #27ae60;
+            border-bottom-color: #27ae60;
+        }
+        
+        .notes {
+            background-color: #fff3cd;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #ffc107;
+        }
+        
+        .notes h2 {
+            color: #856404;
+            border-bottom-color: #ffc107;
+        }
+        
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        li {
+            margin-bottom: 5px;
+        }
+        
+        .metadata {
+            font-size: 0.9em;
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        
+        @media print {
+            body {
+                font-size: 12pt;
+                line-height: 1.4;
+            }
+            
+            .print-content {
+                margin: 0;
+                padding: 0;
+            }
+            
+            h1 {
+                font-size: 18pt;
+                margin-bottom: 12pt;
+            }
+            
+            h2 {
+                font-size: 14pt;
+                margin-top: 12pt;
+                margin-bottom: 8pt;
+            }
+            
+            h3 {
+                font-size: 12pt;
+                margin-top: 8pt;
+                margin-bottom: 6pt;
+            }
+            
+            .step {
+                margin-bottom: 15pt;
+                padding: 10pt;
+            }
+            
+            .summary, .analysis {
+                margin: 15pt 0;
+                padding: 15pt;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="print-content">
+        <h1>{{ process.name }}</h1>
+        
+        <div class="metadata">
+            <strong>Created:</strong> {{ process.created_at|date:"F j, Y \a\t g:i A" }}<br>
+            <strong>Last Updated:</strong> {{ process.updated_at|date:"F j, Y \a\t g:i A" }}<br>
+            {% if process.module %}<strong>Module:</strong> {{ process.module.name }}<br>{% endif %}
+            <strong>Total Steps:</strong> {{ process.steps.count }}
+        </div>
+        
+        {% if process.description %}
+        <h2>Description</h2>
+        <p>{{ process.description|linebreaks }}</p>
+        {% endif %}
+        
+        <h2>Process Steps</h2>
+        {% for step in process.steps.all %}
+        <div class="step">
+            <div class="step-title">{{ step.order }}. {{ step.title }}</div>
+            {% if step.details %}
+            <div class="step-details">{{ step.details|linebreaks }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+        
+        {% if process.summary %}
+        <div class="summary">
+            <h2>Summary</h2>
+            <div>{{ process.summary|linebreaks }}</div>
+        </div>
+        {% endif %}
+        
+        {% if process.analysis %}
+        <div class="analysis">
+            <h2>Analysis</h2>
+            <div>{{ process.analysis|linebreaks }}</div>
+        </div>
+        {% endif %}
+        
+        {% if process.notes %}
+        <div class="notes">
+            <h2>Notes</h2>
+            <div>{{ process.notes|linebreaks }}</div>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>
