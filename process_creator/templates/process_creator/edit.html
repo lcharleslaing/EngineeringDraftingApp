@@ -1,6 +1,8 @@
 {% extends 'base.html' %}
 {% load process_filters %}
 {% block title %}Edit: {{ process.name }}{% endblock %}
+{% block extra_css %}
+{% endblock %}
 {% block content %}
 <div class="sticky top-0 z-10 bg-base-100/90 backdrop-blur border-b border-base-200 mb-6">
   <div class="max-w-7xl mx-auto px-1 sm:px-2 lg:px-4 py-3">
@@ -22,6 +24,22 @@
         <input id="toggle-images" type="checkbox" class="toggle toggle-primary" checked />
         <span class="text-sm">Show Attachments</span>
       </label>
+      <label class="flex items-center gap-2">
+        <input id="toggle-summary" type="checkbox" class="toggle toggle-secondary" checked />
+        <span class="text-sm">Show Summary</span>
+      </label>
+      <label class="flex items-center gap-2">
+        <input id="toggle-analysis" type="checkbox" class="toggle toggle-accent" checked />
+        <span class="text-sm">Show Analysis</span>
+      </label>
+      <label class="flex items-center gap-2">
+        <input id="toggle-description" type="checkbox" class="toggle toggle-info" checked />
+        <span class="text-sm">Show Description</span>
+      </label>
+      <label class="flex items-center gap-2">
+        <input id="toggle-notes" type="checkbox" class="toggle toggle-warning" checked />
+        <span class="text-sm">Show Notes</span>
+      </label>
       <div class="ml-auto flex gap-2">
         <a class="btn btn-outline btn-sm" href="{% url 'process_creator:list' %}">Back</a>
         <a class="btn btn-outline btn-sm" href="{% url 'process_creator:print' process.id %}" target="_blank">Print</a>
@@ -35,7 +53,7 @@
 
 <div class="max-w-7xl mx-auto px-1 sm:px-2 lg:px-4">
   <div class="grid grid-cols-12 gap-6">
-    <div class="col-span-12">
+    <div class="col-span-12" id="summary-section">
       <div class="card bg-base-200 shadow-sm">
         <div class="card-body p-4">
           <div class="flex items-center justify-between mb-4">
@@ -62,7 +80,7 @@
       </div>
     </div>
 
-    <div class="col-span-12">
+    <div class="col-span-12" id="description-section">
       <h2 class="font-semibold mb-2">Description</h2>
       <textarea id="process-description" class="textarea textarea-bordered w-full min-h-28 auto-resize" placeholder="Describe the process">{{ process.description }}</textarea>
     </div>
@@ -72,10 +90,16 @@
         <h2 class="font-semibold">Steps</h2>
         <button id="add-step" class="btn btn-primary btn-sm">Add step</button>
       </div>
-      <div id="steps" class="space-y-3">
+      <div id="steps" class="space-y-6">
         {% for step in process.steps.all %}
-          <div class="card bg-base-200 shadow-sm" data-id="{{ step.id }}">
-            <div class="card-body p-4">
+          <div class="card bg-base-200 shadow-sm relative" data-id="{{ step.id }}">
+            <!-- Step Number Circle -->
+            <div class="absolute -top-3 left-1/2 transform -translate-x-1/2 z-10">
+              <div class="w-8 h-8 rounded-full bg-primary text-primary-content flex items-center justify-center text-sm font-bold shadow-lg border-2 border-base-100">
+                {{ step.order }}
+              </div>
+            </div>
+            <div class="card-body p-4 pt-8">
               <div class="flex items-center gap-3">
                 <span class="drag cursor-grab text-base-300" title="Drag to reorder">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4h4v2h-4V4zm0 14h4v2h-4v-2zM4 10h2v4H4v-4zm14 0h2v4h-2v-4z"/></svg>
@@ -125,7 +149,10 @@
                     <div class="relative group draggable-img" data-img-id="{{ img.id }}" data-order="{{ img.order }}" draggable="true">
                       <img src="{{ img.image.url }}" class="rounded border object-cover w-full h-28" />
                       <button class="btn btn-xs btn-error absolute top-1 right-1 opacity-0 group-hover:opacity-100 delete-img" data-step="{{ step.id }}" data-id="{{ img.id }}">✕</button>
-                      <div class="absolute top-1 left-1 bg-black bg-opacity-50 text-white text-xs px-1 rounded opacity-0 group-hover:opacity-100">{{ img.order }}</div>
+                      <!-- Image Number Circle -->
+                      <div class="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-secondary text-secondary-content flex items-center justify-center text-xs font-bold shadow-lg z-20 border border-base-100">
+                        {{ img.order }}
+                      </div>
                     </div>
                   {% endfor %}
                 </div>
@@ -140,12 +167,12 @@
       </div>
     </div>
 
-    <div class="col-span-12">
+    <div class="col-span-12" id="notes-section">
       <h2 class="font-semibold mb-2">Notes</h2>
       <textarea id="process-notes" class="textarea textarea-bordered w-full min-h-40 auto-resize" placeholder="Any notes">{{ process.notes }}</textarea>
     </div>
 
-    <div class="col-span-12">
+    <div class="col-span-12" id="analysis-section">
       <div class="card bg-base-200 shadow-sm">
         <div class="card-body p-4">
           <div class="flex items-center justify-between mb-4">
@@ -300,7 +327,12 @@ document.querySelectorAll('#steps .card .drag').forEach(handle=>{
   const card = handle.closest('.card');
   card.draggable = true;
   card.addEventListener('dragstart', ()=>{ dragEl = card; card.classList.add('opacity-50'); });
-  card.addEventListener('dragend', ()=>{ card.classList.remove('opacity-50'); dragEl = null; saveOrder(); });
+  card.addEventListener('dragend', ()=>{ 
+    card.classList.remove('opacity-50'); 
+    dragEl = null; 
+    updateStepNumbers(); // Update numbers immediately
+    saveOrder(); 
+  });
 });
 
 document.getElementById('steps').addEventListener('dragover', (e)=>{
@@ -312,6 +344,29 @@ document.getElementById('steps').addEventListener('dragover', (e)=>{
   });
   if (!afterEl) container.appendChild(dragEl); else container.insertBefore(dragEl, afterEl);
 });
+
+function updateStepNumbers(){
+  // Update step number circles in UI immediately
+  const cards = Array.from(document.querySelectorAll('#steps .card'));
+  cards.forEach((card, index) => {
+    const stepNumberCircle = card.querySelector('.absolute.-top-3');
+    if (stepNumberCircle) {
+      stepNumberCircle.textContent = index + 1;
+    }
+  });
+}
+
+function updateImageNumbers(container){
+  // Update image number circles in UI immediately
+  const images = Array.from(container.querySelectorAll('.draggable-img'));
+  images.forEach((img, index) => {
+    img.setAttribute('data-order', index + 1);
+    const numberCircle = img.querySelector('.absolute.-top-2.-left-2');
+    if (numberCircle) {
+      numberCircle.textContent = index + 1;
+    }
+  });
+}
 
 function saveOrder(){
   const ids = Array.from(document.querySelectorAll('#steps .card')).map(c=>c.dataset.id);
@@ -396,6 +451,86 @@ try {
 imgToggle.addEventListener('change', applyAttachmentVisibility);
 // Apply once on load
 applyAttachmentVisibility();
+
+// Toggle for Process Summary section
+const summaryToggle = document.getElementById('toggle-summary');
+const SUMMARY_TOGGLE_KEY = 'process_creator_show_summary';
+function applySummaryVisibility() {
+  const show = summaryToggle.checked;
+  const summarySection = document.getElementById('summary-section');
+  if (summarySection) {
+    summarySection.style.display = show ? '' : 'none';
+  }
+  try { localStorage.setItem(SUMMARY_TOGGLE_KEY, show ? '1' : '0'); } catch(e) {}
+}
+// Initialize from localStorage (default: show)
+try {
+  const saved = localStorage.getItem(SUMMARY_TOGGLE_KEY);
+  if (saved === '0') summaryToggle.checked = false;
+} catch(e) {}
+summaryToggle.addEventListener('change', applySummaryVisibility);
+// Apply once on load
+applySummaryVisibility();
+
+// Toggle for Process Analysis section
+const analysisToggle = document.getElementById('toggle-analysis');
+const ANALYSIS_TOGGLE_KEY = 'process_creator_show_analysis';
+function applyAnalysisVisibility() {
+  const show = analysisToggle.checked;
+  const analysisSection = document.getElementById('analysis-section');
+  if (analysisSection) {
+    analysisSection.style.display = show ? '' : 'none';
+  }
+  try { localStorage.setItem(ANALYSIS_TOGGLE_KEY, show ? '1' : '0'); } catch(e) {}
+}
+// Initialize from localStorage (default: show)
+try {
+  const saved = localStorage.getItem(ANALYSIS_TOGGLE_KEY);
+  if (saved === '0') analysisToggle.checked = false;
+} catch(e) {}
+analysisToggle.addEventListener('change', applyAnalysisVisibility);
+// Apply once on load
+applyAnalysisVisibility();
+
+// Toggle for Description section
+const descriptionToggle = document.getElementById('toggle-description');
+const DESCRIPTION_TOGGLE_KEY = 'process_creator_show_description';
+function applyDescriptionVisibility() {
+  const show = descriptionToggle.checked;
+  const descriptionSection = document.getElementById('description-section');
+  if (descriptionSection) {
+    descriptionSection.style.display = show ? '' : 'none';
+  }
+  try { localStorage.setItem(DESCRIPTION_TOGGLE_KEY, show ? '1' : '0'); } catch(e) {}
+}
+// Initialize from localStorage (default: show)
+try {
+  const saved = localStorage.getItem(DESCRIPTION_TOGGLE_KEY);
+  if (saved === '0') descriptionToggle.checked = false;
+} catch(e) {}
+descriptionToggle.addEventListener('change', applyDescriptionVisibility);
+// Apply once on load
+applyDescriptionVisibility();
+
+// Toggle for Notes section
+const notesToggle = document.getElementById('toggle-notes');
+const NOTES_TOGGLE_KEY = 'process_creator_show_notes';
+function applyNotesVisibility() {
+  const show = notesToggle.checked;
+  const notesSection = document.getElementById('notes-section');
+  if (notesSection) {
+    notesSection.style.display = show ? '' : 'none';
+  }
+  try { localStorage.setItem(NOTES_TOGGLE_KEY, show ? '1' : '0'); } catch(e) {}
+}
+// Initialize from localStorage (default: show)
+try {
+  const saved = localStorage.getItem(NOTES_TOGGLE_KEY);
+  if (saved === '0') notesToggle.checked = false;
+} catch(e) {}
+notesToggle.addEventListener('change', applyNotesVisibility);
+// Apply once on load
+applyNotesVisibility();
 
 // Stats modal functionality
 document.getElementById('stats-btn').addEventListener('click', async (e)=>{
@@ -787,7 +922,7 @@ function addThumb(stepId, data){
   div.setAttribute('data-img-id', data.id);
   div.setAttribute('data-order', data.order || 1);
   div.setAttribute('draggable', 'true');
-  div.innerHTML = `<img src="${data.url}" class="rounded border object-cover w-full h-28" /><button class="btn btn-xs btn-error absolute top-1 right-1 opacity-0 group-hover:opacity-100 delete-img" data-step="${stepId}" data-id="${data.id}">✕</button><div class="absolute top-1 left-1 bg-black bg-opacity-50 text-white text-xs px-1 rounded opacity-0 group-hover:opacity-100">${data.order || 1}</div>`;
+  div.innerHTML = `<img src="${data.url}" class="rounded border object-cover w-full h-28" /><button class="btn btn-xs btn-error absolute top-1 right-1 opacity-0 group-hover:opacity-100 delete-img" data-step="${stepId}" data-id="${data.id}">✕</button><div class="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-secondary text-secondary-content flex items-center justify-center text-xs font-bold shadow-lg z-20 border border-base-100">${data.order || 1}</div>`;
   container.appendChild(div);
   // Event listener is now handled by event delegation above
 }
@@ -1100,6 +1235,11 @@ document.addEventListener('dragstart', (e) => {
 document.addEventListener('dragend', (e) => {
   if (e.target.closest('.draggable-img')) {
     e.target.style.opacity = '';
+    // Update image numbers immediately when drag ends
+    if (draggedImg) {
+      const container = draggedImg.parentElement;
+      updateImageNumbers(container);
+    }
     draggedImg = null;
   }
 });
@@ -1134,15 +1274,8 @@ document.addEventListener('drop', async (e) => {
         body: formData
       });
       if (res.ok) {
-        // Update order numbers in UI
-        imgIds.forEach((id, index) => {
-          const img = container.querySelector(`[data-img-id="${id}"]`);
-          if (img) {
-            img.setAttribute('data-order', index + 1);
-            const orderDiv = img.querySelector('.absolute.top-1.left-1');
-            if (orderDiv) orderDiv.textContent = index + 1;
-          }
-        });
+        // Numbers are already updated in dragend, just confirm server update succeeded
+        console.log('Image order updated successfully');
       }
     } catch (err) {
       console.error('Failed to reorder images:', err);

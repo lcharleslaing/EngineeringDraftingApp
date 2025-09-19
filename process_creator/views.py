@@ -53,6 +53,91 @@ def markdown_to_plain_text(text):
     return text.strip()
 
 
+def add_markdown_to_word_doc(doc, text, level=1):
+    """Add Markdown-formatted text to a Word document with proper formatting"""
+    if not text:
+        return
+    
+    lines = text.split('\n')
+    i = 0
+    
+    while i < len(lines):
+        line = lines[i].strip()
+        
+        if not line:
+            i += 1
+            continue
+            
+        # Handle headers
+        if line.startswith('# '):
+            heading = doc.add_heading(line[2:], level=level)
+            heading.paragraph_format.space_after = Inches(0.1)
+        elif line.startswith('## '):
+            heading = doc.add_heading(line[3:], level=level + 1)
+            heading.paragraph_format.space_after = Inches(0.1)
+        elif line.startswith('### '):
+            heading = doc.add_heading(line[4:], level=level + 2)
+            heading.paragraph_format.space_after = Inches(0.1)
+        
+        # Handle bullet points
+        elif line.startswith('- ') or line.startswith('* '):
+            # Collect all consecutive bullet points
+            bullet_items = []
+            while i < len(lines) and (lines[i].strip().startswith('- ') or lines[i].strip().startswith('* ')):
+                bullet_text = lines[i].strip()[2:].strip()
+                # Handle bold text in bullets
+                bullet_text = re.sub(r'\*\*(.+?)\*\*', r'\1', bullet_text)
+                bullet_items.append(bullet_text)
+                i += 1
+            i -= 1  # Back up one since we'll increment at the end
+            
+            # Add bullet list
+            for item in bullet_items:
+                p = doc.add_paragraph(item, style='List Bullet')
+                p.paragraph_format.space_after = Inches(0.05)
+                p.paragraph_format.line_spacing = 1.15
+        
+        # Handle numbered lists
+        elif re.match(r'^\d+\. ', line):
+            # Collect all consecutive numbered items
+            numbered_items = []
+            while i < len(lines) and re.match(r'^\d+\. ', lines[i].strip()):
+                item_text = re.sub(r'^\d+\. ', '', lines[i].strip())
+                # Handle bold text in numbered items
+                item_text = re.sub(r'\*\*(.+?)\*\*', r'\1', item_text)
+                numbered_items.append(item_text)
+                i += 1
+            i -= 1  # Back up one since we'll increment at the end
+            
+            # Add numbered list
+            for item in numbered_items:
+                p = doc.add_paragraph(item, style='List Number')
+                p.paragraph_format.space_after = Inches(0.05)
+                p.paragraph_format.line_spacing = 1.15
+        
+        # Handle regular paragraphs
+        else:
+            # Handle bold text
+            paragraph_text = re.sub(r'\*\*(.+?)\*\*', r'\1', line)
+            
+            # Check if this is part of a multi-line paragraph
+            if i + 1 < len(lines) and lines[i + 1].strip() and not lines[i + 1].strip().startswith(('#', '-', '*')) and not re.match(r'^\d+\. ', lines[i + 1].strip()):
+                # Collect the full paragraph
+                full_paragraph = [line]
+                i += 1
+                while i < len(lines) and lines[i].strip() and not lines[i].strip().startswith(('#', '-', '*')) and not re.match(r'^\d+\. ', lines[i].strip()):
+                    full_paragraph.append(lines[i].strip())
+                    i += 1
+                i -= 1  # Back up one since we'll increment at the end
+                paragraph_text = ' '.join(full_paragraph)
+            
+            p = doc.add_paragraph(paragraph_text)
+            p.paragraph_format.space_after = Inches(0.1)
+            p.paragraph_format.line_spacing = 1.15
+        
+        i += 1
+
+
 @login_required
 @require_app_access('process_creator', action='view')
 def process_list(request):
@@ -508,14 +593,8 @@ def process_word(request, pk: int):
     # Add summary
     if process.summary:
         doc.add_heading('Summary', level=1)
-        # Format the summary text properly
-        formatted_summary = markdown_to_plain_text(process.summary)
-        # Split into paragraphs and add each one
-        for paragraph in formatted_summary.split('\n\n'):
-            if paragraph.strip():
-                p = doc.add_paragraph(paragraph.strip())
-                p.paragraph_format.space_after = Inches(0.1)
-                p.paragraph_format.line_spacing = 1.15
+        # Use the new Markdown converter for proper formatting
+        add_markdown_to_word_doc(doc, process.summary, level=2)
     
     # Add description
     if process.description:
@@ -584,14 +663,8 @@ def process_word(request, pk: int):
     # Add analysis
     if process.analysis:
         doc.add_heading('Process Analysis', level=1)
-        # Format the analysis text properly
-        formatted_analysis = markdown_to_plain_text(process.analysis)
-        # Split into paragraphs and add each one
-        for paragraph in formatted_analysis.split('\n\n'):
-            if paragraph.strip():
-                p = doc.add_paragraph(paragraph.strip())
-                p.paragraph_format.space_after = Inches(0.1)
-                p.paragraph_format.line_spacing = 1.15
+        # Use the new Markdown converter for proper formatting
+        add_markdown_to_word_doc(doc, process.analysis, level=2)
     
     # Save to BytesIO
     from io import BytesIO
@@ -1222,9 +1295,8 @@ def bulk_word(request):
             # History content
             content = history_item.get('content', '')
             if content:
-                p = doc.add_paragraph(content)
-                p.paragraph_format.space_after = Inches(0.1)
-                p.paragraph_format.line_spacing = 1.15
+                # Use the new Markdown converter for proper formatting
+                add_markdown_to_word_doc(doc, content, level=3)
     
     doc_io = BytesIO()
     doc.save(doc_io)
