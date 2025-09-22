@@ -626,6 +626,14 @@ def process_word(request, pk: int):
     except (TypeError, ValueError):
         steps = process.steps.all()
     
+    # Get toggle states from request parameters
+    # Default to False if not explicitly provided; frontend will pass current toggle states
+    show_description = request.GET.get('show_description', 'false').lower() == 'true'
+    show_notes = request.GET.get('show_notes', 'false').lower() == 'true'
+    show_analysis = request.GET.get('show_analysis', 'false').lower() == 'true'
+    show_attachments = request.GET.get('show_attachments', 'false').lower() == 'true'
+    show_summary = request.GET.get('show_summary', 'false').lower() == 'true'
+    
     # Create a new Word document
     doc = Document()
     
@@ -633,20 +641,20 @@ def process_word(request, pk: int):
     title = doc.add_heading(process.name, 0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
-    # Add summary
-    if process.summary:
+    # Add summary (respect toggle)
+    if show_summary and process.summary:
         doc.add_heading('Summary', level=1)
         # Use the new Markdown converter for proper formatting
         add_markdown_to_word_doc(doc, process.summary, level=2)
     
-    # Add description
-    if process.description:
+    # Add description (if toggle is on)
+    if show_description and process.description:
         doc.add_heading('Description', level=1)
         p = doc.add_paragraph(process.description)
         p.paragraph_format.space_after = Inches(0.1)
         p.paragraph_format.line_spacing = 1.15
     
-    # Add steps
+    # Add steps (always show steps as they are core content)
     if steps.exists():
         doc.add_heading('Steps', level=1)
         for step in steps:
@@ -666,8 +674,8 @@ def process_word(request, pk: int):
                     p = doc.add_paragraph(line)
                     p.paragraph_format.space_after = Inches(0.05)
                     p.paragraph_format.line_spacing = 1.15
-                    # If bullet, render any images linked to this bullet below it
-                    if is_bullet and step.images.exists():
+                    # If bullet, render any images linked to this bullet below it (respect attachments toggle)
+                    if is_bullet and show_attachments and step.images.exists():
                         for img in step.images.all():
                             if img.substep_index == bullet_idx:
                                 try:
@@ -696,8 +704,8 @@ def process_word(request, pk: int):
                                 except Exception:
                                     pass
             
-            # Any remaining images without substep_index: render after details
-            if step.images.exists():
+            # Any remaining images without substep_index: render after details (respect attachments toggle)
+            if show_attachments and step.images.exists():
                 for img in step.images.all():
                     if img.substep_index is None:
                         try:
@@ -726,15 +734,15 @@ def process_word(request, pk: int):
                         except Exception:
                             pass
     
-    # Add notes
-    if process.notes:
+    # Add notes (if toggle is on)
+    if show_notes and process.notes:
         doc.add_heading('Notes', level=1)
         p = doc.add_paragraph(process.notes)
         p.paragraph_format.space_after = Inches(0.1)
         p.paragraph_format.line_spacing = 1.15
     
-    # Add analysis
-    if process.analysis:
+    # Add analysis (if toggle is on)
+    if show_analysis and process.analysis:
         doc.add_heading('Process Analysis', level=1)
         # Use the new Markdown converter for proper formatting
         add_markdown_to_word_doc(doc, process.analysis, level=2)
@@ -1291,6 +1299,13 @@ def bulk_word(request):
     title = doc.add_heading('Bulk Process Report', 0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
+    # Read toggle states (module-level controls)
+    show_description = request.GET.get('show_description', 'false').lower() == 'true'
+    show_notes = request.GET.get('show_notes', 'false').lower() == 'true'
+    show_analysis = request.GET.get('show_analysis', 'false').lower() == 'true'
+    show_summary = request.GET.get('show_summary', 'false').lower() == 'true'
+    show_attachments = request.GET.get('show_attachments', 'false').lower() == 'true'
+
     # Add each process
     for i, process in enumerate(processes, 1):
         if i > 1:
@@ -1300,12 +1315,12 @@ def bulk_word(request):
         process_heading = doc.add_heading(f'{i}. {process.name}', level=1)
         
         # Summary (Markdown -> Word)
-        if process.summary:
+        if show_summary and process.summary:
             doc.add_heading('Summary', level=2)
             add_markdown_to_word_doc(doc, process.summary, level=3)
         
         # Description
-        if process.description:
+        if show_description and process.description:
             doc.add_heading('Description', level=2)
             p = doc.add_paragraph(process.description)
             p.paragraph_format.space_after = Inches(0.1)
@@ -1328,7 +1343,7 @@ def bulk_word(request):
                         p = doc.add_paragraph(line)
                         p.paragraph_format.space_after = Inches(0.05)
                         p.paragraph_format.line_spacing = 1.15
-                        if is_bullet and step.images.exists():
+                        if is_bullet and show_attachments and step.images.exists():
                             for img in step.images.all():
                                 if img.substep_index == bullet_idx:
                                     try:
@@ -1357,7 +1372,7 @@ def bulk_word(request):
                                     except Exception:
                                         pass
                 # Any remaining images without substep_index
-                if step.images.exists():
+                if show_attachments and step.images.exists():
                     for img in step.images.all():
                         if img.substep_index is None:
                             try:
@@ -1387,14 +1402,14 @@ def bulk_word(request):
                                 pass
         
         # Notes
-        if process.notes:
+        if show_notes and process.notes:
             doc.add_heading('Notes', level=2)
             p = doc.add_paragraph(process.notes)
             p.paragraph_format.space_after = Inches(0.1)
             p.paragraph_format.line_spacing = 1.15
         
         # Analysis (Markdown -> Word)
-        if process.analysis:
+        if show_analysis and process.analysis:
             doc.add_heading('Process Analysis', level=2)
             add_markdown_to_word_doc(doc, process.analysis, level=3)
     

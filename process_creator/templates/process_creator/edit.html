@@ -388,7 +388,7 @@
         <a class="btn btn-outline btn-sm" href="{% url 'process_creator:print' process.id %}" target="_blank">Print</a>
         <button id="copy-btn" class="btn btn-primary btn-sm" data-copy-url="{% url 'process_creator:copy' process.id %}">Copy</button>
         <button id="pdf-btn" class="btn btn-secondary btn-sm" disabled title="PDF export temporarily disabled">Save PDF</button>
-        <a id="word-btn" class="btn btn-accent btn-sm" href="{% url 'process_creator:word' process.id %}" download>Save Word</a>
+        <a id="word-btn" class="btn btn-accent btn-sm" href="{% url 'process_creator:word' process.id %}">Save Word</a>
       </div>
     </div>
   </div>
@@ -886,7 +886,7 @@ function updateDownloadLinksForFocus() {
   function withParam(url, key, val) {
     try {
       const u = new URL(url, window.location.origin);
-      if (val) u.searchParams.set(key, val); else u.searchParams.delete(key);
+      u.searchParams.set(key, val);
       return u.pathname + u.search;
     } catch(_) { return url; }
   }
@@ -895,7 +895,14 @@ function updateDownloadLinksForFocus() {
     pdfBtn.href = withParam(pdfBtn.href, 'focused_step', focused || '');
   }
   if (wordBtn && wordBtn.tagName === 'A' && wordBtn.href) {
-    wordBtn.href = withParam(wordBtn.href, 'focused_step', focused || '');
+    let wordUrl = withParam(wordBtn.href, 'focused_step', focused || '');
+    // Add toggle states for Word export (ALL toggles)
+    wordUrl = withParam(wordUrl, 'show_description', document.getElementById('toggle-description').checked);
+    wordUrl = withParam(wordUrl, 'show_notes', document.getElementById('toggle-notes').checked);
+    wordUrl = withParam(wordUrl, 'show_analysis', document.getElementById('toggle-analysis').checked);
+    wordUrl = withParam(wordUrl, 'show_summary', document.getElementById('toggle-summary').checked);
+    wordUrl = withParam(wordUrl, 'show_attachments', document.getElementById('toggle-images').checked);
+    wordBtn.href = wordUrl;
   }
 }
 
@@ -915,6 +922,24 @@ document.addEventListener('DOMContentLoaded', function(){
     }
   } catch(_) {}
 });
+
+// Keep export links in sync when toggles change
+['toggle-description','toggle-notes','toggle-analysis','toggle-summary','toggle-images'].forEach(id=>{
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', updateDownloadLinksForFocus);
+});
+
+// Ensure href is refreshed at click time so parameters are present in the request
+const wordBtnEl = document.getElementById('word-btn');
+if (wordBtnEl) {
+  wordBtnEl.addEventListener('click', (e) => {
+    e.preventDefault();
+    // Refresh href with current params using the existing updater
+    updateDownloadLinksForFocus();
+    // Navigate to refreshed href
+    window.location.href = wordBtnEl.href;
+  });
+}
 
 
 // Image uploads via file input

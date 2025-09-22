@@ -15,7 +15,7 @@
 
 <!-- Module Filter -->
 <div class="mb-6">
-  <div class="flex items-center gap-4">
+  <div class="flex items-center gap-4 flex-wrap">
     <label for="module-filter" class="text-sm font-medium">Filter by Module:</label>
     <select id="module-filter" class="select select-bordered w-full max-w-xs">
       <option value="">All Modules</option>
@@ -31,7 +31,16 @@
         Showing processes in: <strong>{{ selected_module.name }}</strong>
       </div>
     {% endif %}
+    <!-- Module-level export toggles -->
+    <div class="flex items-center gap-3">
+      <label class="label cursor-pointer gap-2"><span class="label-text">Summary</span><input id="toggle-summary-all" type="checkbox" class="toggle toggle-sm" /></label>
+      <label class="label cursor-pointer gap-2"><span class="label-text">Attachments</span><input id="toggle-attachments-all" type="checkbox" class="toggle toggle-sm" /></label>
+      <label class="label cursor-pointer gap-2"><span class="label-text">Analysis</span><input id="toggle-analysis-all" type="checkbox" class="toggle toggle-sm" /></label>
+      <label class="label cursor-pointer gap-2"><span class="label-text">Description</span><input id="toggle-description-all" type="checkbox" class="toggle toggle-sm" /></label>
+      <label class="label cursor-pointer gap-2"><span class="label-text">Notes</span><input id="toggle-notes-all" type="checkbox" class="toggle toggle-sm" /></label>
+    </div>
   </div>
+
 </div>
 
 <div id="process-list" class="grid gap-3">
@@ -318,6 +327,12 @@ document.getElementById('export-pdf-all').addEventListener('click', ()=>{
   if (selectedModule) {
     params.append('module', selectedModule);
   }
+  // Add module-level toggle states
+  params.append('show_summary', document.getElementById('toggle-summary-all').checked);
+  params.append('show_attachments', document.getElementById('toggle-attachments-all').checked);
+  params.append('show_analysis', document.getElementById('toggle-analysis-all').checked);
+  params.append('show_description', document.getElementById('toggle-description-all').checked);
+  params.append('show_notes', document.getElementById('toggle-notes-all').checked);
   
   if (selectedHistory.length > 0) {
     params.append('include_history', 'true');
@@ -343,6 +358,12 @@ document.getElementById('export-word-all').addEventListener('click', ()=>{
   if (selectedModule) {
     params.append('module', selectedModule);
   }
+  // Add module-level toggle states
+  params.append('show_summary', document.getElementById('toggle-summary-all').checked);
+  params.append('show_attachments', document.getElementById('toggle-attachments-all').checked);
+  params.append('show_analysis', document.getElementById('toggle-analysis-all').checked);
+  params.append('show_description', document.getElementById('toggle-description-all').checked);
+  params.append('show_notes', document.getElementById('toggle-notes-all').checked);
   
   if (selectedHistory.length > 0) {
     params.append('include_history', 'true');
