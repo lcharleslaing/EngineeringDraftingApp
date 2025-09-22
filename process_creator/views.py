@@ -1264,6 +1264,11 @@ def bulk_word(request):
         # Process name
         process_heading = doc.add_heading(f'{i}. {process.name}', level=1)
         
+        # Summary (Markdown -> Word)
+        if process.summary:
+            doc.add_heading('Summary', level=2)
+            add_markdown_to_word_doc(doc, process.summary, level=3)
+        
         # Description
         if process.description:
             doc.add_heading('Description', level=2)
@@ -1278,41 +1283,73 @@ def bulk_word(request):
                 step_heading = doc.add_heading(f'{step.order}. {step.title}', level=3)
                 
                 if step.details:
-                    p = doc.add_paragraph(step.details)
-                    p.paragraph_format.space_after = Inches(0.1)
-                    p.paragraph_format.line_spacing = 1.15
-                
-                # Images
+                    lines = step.details.split('\n')
+                    bullet_idx = -1
+                    for raw in lines:
+                        line = raw.rstrip('\r')
+                        is_bullet = bool(re.match(r'^\s*-\s+', line))
+                        if is_bullet:
+                            bullet_idx += 1
+                        p = doc.add_paragraph(line)
+                        p.paragraph_format.space_after = Inches(0.05)
+                        p.paragraph_format.line_spacing = 1.15
+                        if is_bullet and step.images.exists():
+                            for img in step.images.all():
+                                if img.substep_index == bullet_idx:
+                                    try:
+                                        img_path = os.path.join(settings.MEDIA_ROOT, str(img.image))
+                                        if os.path.exists(img_path):
+                                            table = doc.add_table(rows=1, cols=1)
+                                            table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                            cell = table.cell(0, 0)
+                                            cell.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                            paragraph = cell.paragraphs[0]
+                                            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                            run = paragraph.add_run()
+                                            run.add_picture(img_path, width=Inches(6))
+                                            from docx.oxml.shared import OxmlElement, qn
+                                            tc = cell._tc
+                                            tcPr = tc.get_or_add_tcPr()
+                                            tcBorders = OxmlElement('w:tcBorders')
+                                            for border_name in ['top', 'left', 'bottom', 'right']:
+                                                border = OxmlElement(f'w:{border_name}')
+                                                border.set(qn('w:val'), 'single')
+                                                border.set(qn('w:sz'), '12')
+                                                border.set(qn('w:space'), '0')
+                                                border.set(qn('w:color'), '333333')
+                                                tcBorders.append(border)
+                                            tcPr.append(tcBorders)
+                                    except Exception:
+                                        pass
+                # Any remaining images without substep_index
                 if step.images.exists():
                     for img in step.images.all():
-                        try:
-                            img_path = os.path.join(settings.MEDIA_ROOT, str(img.image))
-                            if os.path.exists(img_path):
-                                table = doc.add_table(rows=1, cols=1)
-                                table.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                                cell = table.cell(0, 0)
-                                cell.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
-                                
-                                paragraph = cell.paragraphs[0]
-                                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                                run = paragraph.add_run()
-                                run.add_picture(img_path, width=Inches(6))
-                                
-                                # Add border
-                                from docx.oxml.shared import OxmlElement, qn
-                                tc = cell._tc
-                                tcPr = tc.get_or_add_tcPr()
-                                tcBorders = OxmlElement('w:tcBorders')
-                                for border_name in ['top', 'left', 'bottom', 'right']:
-                                    border = OxmlElement(f'w:{border_name}')
-                                    border.set(qn('w:val'), 'single')
-                                    border.set(qn('w:sz'), '12')
-                                    border.set(qn('w:space'), '0')
-                                    border.set(qn('w:color'), '333333')
-                                    tcBorders.append(border)
-                                tcPr.append(tcBorders)
-                        except Exception as e:
-                            pass
+                        if img.substep_index is None:
+                            try:
+                                img_path = os.path.join(settings.MEDIA_ROOT, str(img.image))
+                                if os.path.exists(img_path):
+                                    table = doc.add_table(rows=1, cols=1)
+                                    table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                    cell = table.cell(0, 0)
+                                    cell.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                    paragraph = cell.paragraphs[0]
+                                    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                    run = paragraph.add_run()
+                                    run.add_picture(img_path, width=Inches(6))
+                                    from docx.oxml.shared import OxmlElement, qn
+                                    tc = cell._tc
+                                    tcPr = tc.get_or_add_tcPr()
+                                    tcBorders = OxmlElement('w:tcBorders')
+                                    for border_name in ['top', 'left', 'bottom', 'right']:
+                                        border = OxmlElement(f'w:{border_name}')
+                                        border.set(qn('w:val'), 'single')
+                                        border.set(qn('w:sz'), '12')
+                                        border.set(qn('w:space'), '0')
+                                        border.set(qn('w:color'), '333333')
+                                        tcBorders.append(border)
+                                    tcPr.append(tcBorders)
+                            except Exception:
+                                pass
         
         # Notes
         if process.notes:
@@ -1320,6 +1357,11 @@ def bulk_word(request):
             p = doc.add_paragraph(process.notes)
             p.paragraph_format.space_after = Inches(0.1)
             p.paragraph_format.line_spacing = 1.15
+        
+        # Analysis (Markdown -> Word)
+        if process.analysis:
+            doc.add_heading('Process Analysis', level=2)
+            add_markdown_to_word_doc(doc, process.analysis, level=3)
     
     # Add history section if history data is provided
     if history_data:
@@ -1330,10 +1372,9 @@ def bulk_word(request):
             # History item title
             history_heading = doc.add_heading(f'{i}. {history_item.get("type", "Unknown")} - {history_item.get("date", "")}', level=2)
             
-            # History content
+            # History content (Markdown -> Word)
             content = history_item.get('content', '')
             if content:
-                # Use the new Markdown converter for proper formatting
                 add_markdown_to_word_doc(doc, content, level=3)
     
     doc_io = BytesIO()
