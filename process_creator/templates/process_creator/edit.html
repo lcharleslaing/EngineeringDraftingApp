@@ -455,17 +455,15 @@
               </div>
             </div>
             <div class="card-body p-4 pt-8">
-              <div class="flex flex-col lg:flex-row items-start lg:items-center gap-2 lg:gap-3">
-                <div class="flex items-center gap-2 w-full lg:w-auto">
-                  <span class="drag cursor-grab text-base-300" title="Drag to reorder">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4h4v2h-4V4zm0 14h4v2h-4v-2zM4 10h2v4H4v-4zm14 0h2v4h-2v-4z"/></svg>
-                  </span>
-                  <input class="step-title input input-sm input-bordered flex-1" value="{{ step.title }}" required />
-                </div>
-                <div class="flex gap-1 step-buttons w-full lg:w-auto">
-                  <button class="btn btn-sm flex-1 lg:flex-none" data-insert="up" title="Add before">+ ☝️</button>
-                  <button class="btn btn-sm flex-1 lg:flex-none" data-insert="down" title="Add after">+ 👇</button>
-                  <button class="btn btn-sm btn-error step-delete flex-1 lg:flex-none">Delete</button>
+              <div class="flex items-center gap-3 w-full">
+                <span class="drag cursor-grab text-base-300 flex-shrink-0" title="Drag to reorder">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4h4v2h-4V4zm0 14h4v2h-4v-2zM4 10h2v4H4v-4zm14 0h2v4h-2v-4z"/></svg>
+                </span>
+                <input class="step-title input input-sm input-bordered flex-1" value="{{ step.title }}" required />
+                <div class="flex gap-1 step-buttons flex-shrink-0">
+                  <button class="btn btn-sm" data-insert="up" title="Add before">+ ☝️</button>
+                  <button class="btn btn-sm" data-insert="down" title="Add after">+ 👇</button>
+                  <button class="btn btn-sm btn-error step-delete">Delete</button>
                 </div>
               </div>
               <!-- Bullet Pills Container -->
