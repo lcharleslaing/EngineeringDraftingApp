@@ -253,7 +253,12 @@ def process_delete(request, pk: int):
 @require_app_access('process_creator', action='view')
 def process_print(request, pk: int):
     process = get_object_or_404(Process, pk=pk)
-    return render(request, "process_creator/print.html", {"process": process})
+    focused_step_id = request.GET.get('focused_step')
+    try:
+        steps = process.steps.all() if not focused_step_id else process.steps.filter(id=int(focused_step_id))
+    except (TypeError, ValueError):
+        steps = process.steps.all()
+    return render(request, "process_creator/print.html", {"process": process, "steps": steps})
 
 
 @login_required
@@ -416,6 +421,25 @@ def step_image_delete(request, pk: int, step_id: int, image_id: int):
 @login_required
 @require_app_access('process_creator', action='edit')
 @require_POST
+def step_image_update_substep(request, pk: int, step_id: int, image_id: int):
+    process = get_object_or_404(Process, pk=pk)
+    step = get_object_or_404(Step, pk=step_id, process=process)
+    img = get_object_or_404(StepImage, pk=image_id, step=step)
+    
+    data = json.loads(request.body or '{}') if request.headers.get('Content-Type','').startswith('application/json') else request.POST
+    substep_index = data.get('substep_index')
+    
+    if substep_index is not None:
+        img.substep_index = substep_index
+        img.save()
+        return JsonResponse({"ok": True})
+    else:
+        return JsonResponse({"error": "substep_index is required"}, status=400)
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
 def step_link_add(request, pk: int, step_id: int):
     process = get_object_or_404(Process, pk=pk)
     step = get_object_or_404(Step, pk=step_id, process=process)
@@ -548,9 +572,14 @@ def step_images_reorder(request, pk: int, step_id: int):
 @require_app_access('process_creator', action='view')
 def process_pdf(request, pk: int):
     process = get_object_or_404(Process, pk=pk)
-
+    # Optional focused step
+    focused_step_id = request.GET.get('focused_step')
+    try:
+        steps = process.steps.all() if not focused_step_id else process.steps.filter(id=int(focused_step_id))
+    except (TypeError, ValueError):
+        steps = process.steps.all()
     # Render the print template to HTML
-    html_string = render_to_string('process_creator/print.html', {'process': process})
+    html_string = render_to_string('process_creator/print.html', {'process': process, 'steps': steps})
 
     # Helper to resolve static/media URLs for xhtml2pdf
     def link_callback(uri, rel):
@@ -590,6 +619,12 @@ def process_pdf(request, pk: int):
 @require_app_access('process_creator', action='view')
 def process_word(request, pk: int):
     process = get_object_or_404(Process, pk=pk)
+    # Optional focused step
+    focused_step_id = request.GET.get('focused_step')
+    try:
+        steps = process.steps.all() if not focused_step_id else process.steps.filter(id=int(focused_step_id))
+    except (TypeError, ValueError):
+        steps = process.steps.all()
     
     # Create a new Word document
     doc = Document()
@@ -612,9 +647,9 @@ def process_word(request, pk: int):
         p.paragraph_format.line_spacing = 1.15
     
     # Add steps
-    if process.steps.exists():
+    if steps.exists():
         doc.add_heading('Steps', level=1)
-        for step in process.steps.all():
+        for step in steps:
             # Add step title
             step_heading = doc.add_heading(f'{step.order}. {step.title}', level=2)
             

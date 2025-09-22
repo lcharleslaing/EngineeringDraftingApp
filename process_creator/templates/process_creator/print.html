@@ -93,7 +93,7 @@
   
   <h2>Steps</h2>
   <ol>
-    {% for step in process.steps.all %}
+    {% for step in steps|default:process.steps.all %}
       <li>
         <div class="step-title">{{ step.title }}</div>
         {% if step.details %}

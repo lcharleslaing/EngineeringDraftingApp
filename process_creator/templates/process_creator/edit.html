@@ -217,7 +217,7 @@
         <a class="btn btn-outline btn-sm" href="{% url 'process_creator:list' %}">Back</a>
         <a class="btn btn-outline btn-sm" href="{% url 'process_creator:print' process.id %}" target="_blank">Print</a>
         <button id="copy-btn" class="btn btn-primary btn-sm" data-copy-url="{% url 'process_creator:copy' process.id %}">Copy</button>
-        <a id="pdf-btn" class="btn btn-secondary btn-sm" href="{% url 'process_creator:pdf' process.id %}" download>Save PDF</a>
+        <button id="pdf-btn" class="btn btn-secondary btn-sm" disabled title="PDF export temporarily disabled">Save PDF</button>
         <a id="word-btn" class="btn btn-accent btn-sm" href="{% url 'process_creator:word' process.id %}" download>Save Word</a>
       </div>
     </div>
@@ -708,6 +708,44 @@ document.getElementById('copy-btn').addEventListener('click', async (e)=>{
   }
 });
 
+// If a step is focused (Focus This Only), append focused_step to Save links
+function updateDownloadLinksForFocus() {
+  const focused = focusedStepId;
+  const pdfBtn = document.getElementById('pdf-btn');
+  const wordBtn = document.getElementById('word-btn');
+  function withParam(url, key, val) {
+    try {
+      const u = new URL(url, window.location.origin);
+      if (val) u.searchParams.set(key, val); else u.searchParams.delete(key);
+      return u.pathname + u.search;
+    } catch(_) { return url; }
+  }
+  // Only update href if element is an anchor
+  if (pdfBtn && pdfBtn.tagName === 'A' && pdfBtn.href) {
+    pdfBtn.href = withParam(pdfBtn.href, 'focused_step', focused || '');
+  }
+  if (wordBtn && wordBtn.tagName === 'A' && wordBtn.href) {
+    wordBtn.href = withParam(wordBtn.href, 'focused_step', focused || '');
+  }
+}
+
+// Initialize once and safely wrap focus functions after they're defined
+document.addEventListener('DOMContentLoaded', function(){
+  updateDownloadLinksForFocus();
+  try {
+    if (typeof window.enterFocusMode === 'function' && !window._enterFocusModeWrapped) {
+      const _origEnter = window.enterFocusMode;
+      window.enterFocusMode = function(stepId){ _origEnter(stepId); focusedStepId = String(stepId); updateDownloadLinksForFocus(); };
+      window._enterFocusModeWrapped = true;
+    }
+    if (typeof window.exitFocusMode === 'function' && !window._exitFocusModeWrapped) {
+      const _origExit = window.exitFocusMode;
+      window.exitFocusMode = function(){ _origExit(); focusedStepId = null; updateDownloadLinksForFocus(); };
+      window._exitFocusModeWrapped = true;
+    }
+  } catch(_) {}
+});
+
 
 // Image uploads via file input
 document.querySelectorAll('input[data-upload-step]').forEach(input=>{
@@ -1086,6 +1124,7 @@ document.addEventListener('click', (e) => {
 
 // Track last focused/clicked step for paste fallback
 let lastFocusedStepId = null;
+const lastFocusedBulletIndexByStep = {};
 document.addEventListener('focusin', (e) => {
   const card = e.target && e.target.closest && e.target.closest('.step-card');
   if (card) lastFocusedStepId = card.dataset.id;
@@ -1093,6 +1132,17 @@ document.addEventListener('focusin', (e) => {
 document.getElementById('steps').addEventListener('mousedown', (e) => {
   const card = e.target && e.target.closest && e.target.closest('.step-card');
   if (card) lastFocusedStepId = card.dataset.id;
+});
+
+// Track last clicked pill index per step (so pasting can attach to that substep)
+document.addEventListener('mousedown', (e) => {
+  const pill = e.target && e.target.closest && e.target.closest('.draggable-pill');
+  if (!pill) return;
+  const stepCard = pill.closest('.step-card');
+  if (!stepCard) return;
+  const stepId = stepCard.dataset.id;
+  const idxAttr = pill.getAttribute('data-index');
+  if (idxAttr != null) lastFocusedBulletIndexByStep[stepId] = parseInt(idxAttr, 10);
 });
 
 // Paste handler on window - attach to nearest focused step card
@@ -1137,14 +1187,18 @@ document.addEventListener('paste', async (e)=>{
       // Compute index among bullet lines (lines starting with '-') up to caret line
       let idx = -1;
       for (let i = 0; i <= caretLineNumber && i < allLines.length; i++) {
-        const isBullet = /^\s*-\s+/.test(allLines[i]);
+        const isBullet = /^\s*-\s?/.test(allLines[i]);
         if (isBullet) idx++;
       }
       // Only set if the caret is within a bullet line
-      if (/^\s*-\s+/.test(allLines[Math.max(0, caretLineNumber)] || '')) {
+      if (/^\s*-\s?/.test(allLines[Math.max(0, caretLineNumber)] || '')) {
         substepIndex = idx >= 0 ? idx : null;
       }
     } catch(_) {}
+  }
+  // If not in textarea or no bullet at caret, fall back to last clicked pill
+  if ((substepIndex === null || substepIndex === undefined) && lastFocusedBulletIndexByStep[stepId] != null) {
+    substepIndex = lastFocusedBulletIndexByStep[stepId];
   }
   // If CAD pasted (DWG / IDW)
   if (cadFile) {
@@ -1295,6 +1349,9 @@ function addThumb(stepId, data){
   div.setAttribute('data-order', data.order || 1);
   div.setAttribute('draggable', 'true');
   div.innerHTML = `<img src="${data.url}" class="rounded border object-cover w-full h-28" /><button class="btn btn-xs btn-error absolute top-1 right-1 opacity-0 group-hover:opacity-100 delete-img" data-step="${stepId}" data-id="${data.id}">✕</button><div class="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-secondary text-secondary-content flex items-center justify-center text-xs font-bold shadow-lg z-20 border border-base-100">${data.order || 1}</div>`;
+  if (data.substep_index !== null && data.substep_index !== undefined) {
+    div.setAttribute('data-substep-index', data.substep_index);
+  }
   container.appendChild(div);
   
   // Renumber all images after adding new one
@@ -1774,31 +1831,88 @@ document.addEventListener('dragend', (e) => {
       const container = draggedImg.parentElement;
       updateImageNumbers(container);
     }
-    draggedImg = null;
+    // Don't set draggedImg to null here - let drop event handle it
   }
 });
 
 document.addEventListener('dragover', (e) => {
   e.preventDefault();
   const imgContainer = e.target.closest('.draggable-img');
+  const pillContainer = e.target.closest('.draggable-pill');
+  
   if (imgContainer && draggedImg && imgContainer !== draggedImg) {
     const container = imgContainer.parentElement;
-    const afterElement = getDragAfterElement(container, e.clientY);
-    if (afterElement == null) {
-      container.appendChild(draggedImg);
-    } else {
-      container.insertBefore(draggedImg, afterElement);
+    if (container && draggedImg) {
+      const afterElement = getDragAfterElement(container, e.clientY);
+      if (afterElement == null) {
+        container.appendChild(draggedImg);
+      } else {
+        container.insertBefore(draggedImg, afterElement);
+      }
     }
+  } else if (pillContainer && draggedImg) {
+    // Highlight the pill to show it's a valid drop target
+    pillContainer.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
+    pillContainer.style.borderColor = 'rgb(59, 130, 246)';
+  }
+});
+
+document.addEventListener('dragleave', (e) => {
+  const pillContainer = e.target.closest('.draggable-pill');
+  if (pillContainer && draggedImg) {
+    // Remove highlight when leaving pill
+    pillContainer.style.backgroundColor = '';
+    pillContainer.style.borderColor = '';
   }
 });
 
 document.addEventListener('drop', async (e) => {
   e.preventDefault();
-  if (draggedImg) {
+  const pillContainer = e.target.closest('.draggable-pill');
+  
+  if (draggedImg && pillContainer) {
+    // Remove highlight
+    pillContainer.style.backgroundColor = '';
+    pillContainer.style.borderColor = '';
+    
+    // Get the substep index from the pill
+    const substepIndex = parseInt(pillContainer.getAttribute('data-index'));
+    const stepId = pillContainer.closest('.step-card').dataset.id;
+    const imgId = draggedImg.getAttribute('data-img-id');
+    
+    if (!isNaN(substepIndex) && stepId && imgId) {
+      try {
+        // Update the image's substep_index on the server
+        const url = base + 'steps/' + stepId + '/images/' + imgId + '/update-substep/';
+        console.log('Updating image substep:', url, 'substep_index:', substepIndex);
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'X-CSRFToken': getCookie('csrftoken'), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ substep_index: substepIndex })
+        });
+        
+        if (res.ok) {
+          // Update the image's data attribute
+          draggedImg.setAttribute('data-substep-index', substepIndex);
+          showToast(`Image moved to substep ${substepIndex + 1}`, 'success');
+        } else {
+          const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+          console.error('Server error:', res.status, errorData);
+          showToast(`Failed to move image to substep: ${errorData.error || 'Unknown error'}`, 'error');
+        }
+      } catch (err) {
+        console.error('Failed to update image substep:', err);
+        showToast('Failed to move image to substep', 'error');
+      }
+    }
+  } else if (draggedImg) {
     const container = draggedImg.parentElement;
     // Numbers and server update are handled in dragend event
     console.log('Image drop completed');
   }
+  
+  // Clear draggedImg after drop
+  draggedImg = null;
 });
 
 function getDragAfterElement(container, y) {
