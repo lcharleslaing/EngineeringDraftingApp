@@ -35,7 +35,10 @@ urlpatterns = [
     path("<int:pk>/steps/<int:step_id>/images/reorder/", views.step_images_reorder, name="step_images_reorder"),
     path("print-all/", views.process_print_all, name="print_all"),
     # Module management
+    path("modules/", views.module_manage, name="module_manage"),
     path("modules/create/", views.module_create, name="module_create"),
+    path("modules/<int:module_id>/update/", views.module_update, name="module_update"),
+    path("modules/<int:module_id>/delete/", views.module_delete, name="module_delete"),
     # Bulk operations
     path("bulk/summary/", views.bulk_summary, name="bulk_summary"),
     path("bulk/analyze/", views.bulk_analyze, name="bulk_analyze"),

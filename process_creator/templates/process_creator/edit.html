@@ -63,7 +63,8 @@
     display: none !important;
   }
   .step-compact .toggle-textarea,
-  .step-compact .toggle-attachments {
+  .step-compact .toggle-attachments,
+  .step-compact .toggle-pdfs-step {
     display: none !important;
   }
   
@@ -363,24 +364,28 @@
     <div class="flex flex-col lg:flex-row items-start lg:items-center gap-2 lg:gap-2">
       <div class="flex flex-wrap gap-2">
         <label class="flex items-center gap-2">
-          <input id="toggle-images" type="checkbox" class="toggle toggle-primary" checked />
+          <input id="toggle-images" type="checkbox" class="toggle toggle-primary" />
           <span class="text-sm">Show Attachments</span>
         </label>
         <label class="flex items-center gap-2">
-          <input id="toggle-summary" type="checkbox" class="toggle toggle-secondary" checked />
+          <input id="toggle-summary" type="checkbox" class="toggle toggle-secondary" />
           <span class="text-sm">Show Summary</span>
         </label>
         <label class="flex items-center gap-2">
-          <input id="toggle-analysis" type="checkbox" class="toggle toggle-accent" checked />
+          <input id="toggle-analysis" type="checkbox" class="toggle toggle-accent" />
           <span class="text-sm">Show Analysis</span>
         </label>
         <label class="flex items-center gap-2">
-          <input id="toggle-description" type="checkbox" class="toggle toggle-info" checked />
+          <input id="toggle-description" type="checkbox" class="toggle toggle-info" />
           <span class="text-sm">Show Description</span>
         </label>
         <label class="flex items-center gap-2">
-          <input id="toggle-notes" type="checkbox" class="toggle toggle-warning" checked />
+          <input id="toggle-notes" type="checkbox" class="toggle toggle-warning" />
           <span class="text-sm">Show Notes</span>
+        </label>
+        <label class="flex items-center gap-2">
+          <input id="toggle-pdfs" type="checkbox" class="toggle toggle-error" />
+          <span class="text-sm">Show PDFs</span>
         </label>
       </div>
       <div class="flex flex-wrap gap-2 w-full lg:w-auto lg:ml-auto">
@@ -509,7 +514,7 @@
                 <div class="text-sm opacity-70 mb-1">Screenshots (paste or drop images)</div>
                 <div class="grid grid-cols-2 md:grid-cols-3 gap-2" id="imgs-{{ step.id }}" data-step-id="{{ step.id }}">
                   {% for img in step.images.all %}
-                    <div class="relative group draggable-img" data-img-id="{{ img.id }}" data-order="{{ img.order }}" draggable="true">
+                    <div class="relative group draggable-img" data-img-id="{{ img.id }}" data-order="{{ img.order }}" data-substep-index="{{ img.substep_index|default_if_none:'' }}" draggable="true">
                       <img src="{{ img.image.url }}" class="rounded border object-cover w-full h-28" />
                       <button class="btn btn-xs btn-error absolute top-1 right-1 opacity-0 group-hover:opacity-100 delete-img" data-step="{{ step.id }}" data-id="{{ img.id }}">✕</button>
                       <!-- Image Number Circle -->
@@ -531,6 +536,9 @@
                 </button>
                 <button class="btn btn-sm btn-outline toggle-attachments flex-1 sm:flex-none" data-step="{{ step.id }}">
                   <span class="toggle-text">Show Attachments</span>
+                </button>
+                <button class="btn btn-sm btn-outline toggle-pdfs-step flex-1 sm:flex-none" data-step="{{ step.id }}">
+                  <span class="toggle-text">Show PDFs</span>
                 </button>
                 <button class="btn btn-sm btn-outline focus-step flex-1 sm:flex-none" data-step="{{ step.id }}">
                   Focus This Only
@@ -666,12 +674,16 @@ document.getElementById('process-module').addEventListener('change', async (e)=>
       sel.insertBefore(opt, sel.querySelector('option[value="__new__"]'));
       sel.value = mod.id;
       await fetch(base + 'update/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}, body:new URLSearchParams({module:mod.id})});
+      // Save module selection to localStorage
+      try { localStorage.setItem('process_creator_selected_module', mod.id); } catch(e) {}
     }});
     // restore current while modal open
     e.target.value = '{{ process.module.id|default:"" }}';
     return;
   }
   await fetch(base + 'update/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}, body:new URLSearchParams({module:e.target.value})});
+  // Save module selection to localStorage
+  try { localStorage.setItem('process_creator_selected_module', e.target.value); } catch(e) {}
 });
 
 // Add step
@@ -752,6 +764,24 @@ document.querySelectorAll('#steps .card').forEach(card=>{
     toggleAttachmentsText.textContent = isHidden ? 'Hide Attachments' : 'Show Attachments';
   });
   
+  // Toggle PDFs visibility for this step
+  const togglePdfsBtn = card.querySelector('.toggle-pdfs-step');
+  const togglePdfsText = togglePdfsBtn.querySelector('.toggle-text');
+  const pdfSection = card.querySelector('#pdfs-' + id);
+  
+  // Set initial button text since PDFs are hidden by default
+  togglePdfsText.textContent = 'Show PDFs';
+  
+  togglePdfsBtn.addEventListener('click', () => {
+    if (pdfSection) {
+      const isHidden = pdfSection.style.display === 'none' || pdfSection.style.display === '';
+      
+      pdfSection.style.display = isHidden ? 'block' : 'none';
+      
+      togglePdfsText.textContent = isHidden ? 'Hide PDFs' : 'Show PDFs';
+    }
+  });
+  
   
   card.querySelector('.step-delete').addEventListener('click', ()=>{
     post(base + 'steps/' + id + '/delete/').then(()=>location.reload());
@@ -763,6 +793,19 @@ let dragEl = null;
 
 // Initialize drag and drop when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
+  // Restore saved module selection
+  try {
+    const savedModule = localStorage.getItem('process_creator_selected_module');
+    if (savedModule) {
+      const moduleSelect = document.getElementById('process-module');
+      if (moduleSelect && moduleSelect.querySelector(`option[value="${savedModule}"]`)) {
+        moduleSelect.value = savedModule;
+      }
+    }
+  } catch(e) {
+    console.warn('Could not restore module selection:', e);
+  }
+
   console.log('Setting up drag and drop...');
   const dragHandles = document.querySelectorAll('#steps .card .drag');
   console.log('Found drag handles:', dragHandles.length);
@@ -902,6 +945,7 @@ function updateDownloadLinksForFocus() {
     wordUrl = withParam(wordUrl, 'show_analysis', document.getElementById('toggle-analysis').checked);
     wordUrl = withParam(wordUrl, 'show_summary', document.getElementById('toggle-summary').checked);
     wordUrl = withParam(wordUrl, 'show_attachments', document.getElementById('toggle-images').checked);
+    wordUrl = withParam(wordUrl, 'show_pdfs', document.getElementById('toggle-pdfs').checked);
     wordBtn.href = wordUrl;
   }
 }
@@ -924,7 +968,7 @@ document.addEventListener('DOMContentLoaded', function(){
 });
 
 // Keep export links in sync when toggles change
-['toggle-description','toggle-notes','toggle-analysis','toggle-summary','toggle-images'].forEach(id=>{
+['toggle-description','toggle-notes','toggle-analysis','toggle-summary','toggle-images','toggle-pdfs'].forEach(id=>{
   const el = document.getElementById(id);
   if (el) el.addEventListener('change', updateDownloadLinksForFocus);
 });
@@ -988,10 +1032,10 @@ function applyAttachmentVisibility(){
   });
   try { localStorage.setItem(TOGGLE_KEY, show ? '1' : '0'); } catch(e) {}
 }
-// Initialize from localStorage (default: show)
+// Initialize from localStorage (default: off)
 try {
   const saved = localStorage.getItem(TOGGLE_KEY);
-  if (saved === '0') imgToggle.checked = false;
+  if (saved === '1') imgToggle.checked = true;
 } catch(e) {}
 imgToggle.addEventListener('change', applyAttachmentVisibility);
 // Apply once on load
@@ -1008,10 +1052,10 @@ function applySummaryVisibility() {
   }
   try { localStorage.setItem(SUMMARY_TOGGLE_KEY, show ? '1' : '0'); } catch(e) {}
 }
-// Initialize from localStorage (default: show)
+// Initialize from localStorage (default: off)
 try {
   const saved = localStorage.getItem(SUMMARY_TOGGLE_KEY);
-  if (saved === '0') summaryToggle.checked = false;
+  if (saved === '1') summaryToggle.checked = true;
 } catch(e) {}
 summaryToggle.addEventListener('change', applySummaryVisibility);
 // Apply once on load
@@ -1028,10 +1072,10 @@ function applyAnalysisVisibility() {
   }
   try { localStorage.setItem(ANALYSIS_TOGGLE_KEY, show ? '1' : '0'); } catch(e) {}
 }
-// Initialize from localStorage (default: show)
+// Initialize from localStorage (default: off)
 try {
   const saved = localStorage.getItem(ANALYSIS_TOGGLE_KEY);
-  if (saved === '0') analysisToggle.checked = false;
+  if (saved === '1') analysisToggle.checked = true;
 } catch(e) {}
 analysisToggle.addEventListener('change', applyAnalysisVisibility);
 // Apply once on load
@@ -1048,10 +1092,10 @@ function applyDescriptionVisibility() {
   }
   try { localStorage.setItem(DESCRIPTION_TOGGLE_KEY, show ? '1' : '0'); } catch(e) {}
 }
-// Initialize from localStorage (default: show)
+// Initialize from localStorage (default: off)
 try {
   const saved = localStorage.getItem(DESCRIPTION_TOGGLE_KEY);
-  if (saved === '0') descriptionToggle.checked = false;
+  if (saved === '1') descriptionToggle.checked = true;
 } catch(e) {}
 descriptionToggle.addEventListener('change', applyDescriptionVisibility);
 // Apply once on load
@@ -1068,14 +1112,37 @@ function applyNotesVisibility() {
   }
   try { localStorage.setItem(NOTES_TOGGLE_KEY, show ? '1' : '0'); } catch(e) {}
 }
-// Initialize from localStorage (default: show)
+// Initialize from localStorage (default: off)
 try {
   const saved = localStorage.getItem(NOTES_TOGGLE_KEY);
-  if (saved === '0') notesToggle.checked = false;
+  if (saved === '1') notesToggle.checked = true;
 } catch(e) {}
 notesToggle.addEventListener('change', applyNotesVisibility);
 // Apply once on load
 applyNotesVisibility();
+
+// PDFs toggle functionality
+const PDFS_TOGGLE_KEY = 'process_creator_pdfs_toggle';
+const pdfsToggle = document.getElementById('toggle-pdfs');
+function applyPdfsVisibility() {
+  const show = pdfsToggle.checked;
+  // Show/hide PDF sections in all steps
+  document.querySelectorAll('.step-attachments').forEach(section => {
+    const pdfSection = section.querySelector('#pdfs-' + section.id.split('-')[1]);
+    if (pdfSection) {
+      pdfSection.style.display = show ? '' : 'none';
+    }
+  });
+  try { localStorage.setItem(PDFS_TOGGLE_KEY, show ? '1' : '0'); } catch(e) {}
+}
+// Initialize from localStorage (default: off)
+try {
+  const saved = localStorage.getItem(PDFS_TOGGLE_KEY);
+  if (saved === '1') pdfsToggle.checked = true;
+} catch(e) {}
+pdfsToggle.addEventListener('change', applyPdfsVisibility);
+// Apply once on load
+applyPdfsVisibility();
 
 // Stats modal functionality
 document.getElementById('stats-btn').addEventListener('click', async (e)=>{
@@ -1584,6 +1651,16 @@ function convertBulletsToPills(stepId, text) {
   
   if (!pillsContainer || !pillsList) return;
   
+  // Capture old bullets (by text) before rebuild to preserve image associations
+  const oldPills = Array.from(pillsList.querySelectorAll('.draggable-pill'));
+  const oldBullets = oldPills.map(p => (p.querySelector('.pill-text')?.textContent || '').trim());
+  const oldIndexByOccurrence = {};
+  oldBullets.forEach((t, idx) => {
+    const key = `${t}__${(oldIndexByOccurrence[t] || 0)}`;
+    oldIndexByOccurrence[t] = (oldIndexByOccurrence[t] || 0) + 1;
+    oldIndexByOccurrence[key] = idx;
+  });
+
   // Extract bullet points (lines starting with -)
   const bullets = text.split('\n')
     .map(line => line.trim())
@@ -1600,6 +1677,9 @@ function convertBulletsToPills(stepId, text) {
   pillsContainer.style.display = 'block';
   pillsList.innerHTML = '';
   
+  // Build new pills and track new indices by (text, occurrence)
+  const newIndexByOccurrence = {};
+  const newIndexMap = {};
   bullets.forEach((bullet, index) => {
     const pill = document.createElement('div');
     pill.className = 'draggable-pill bg-base-100 border border-base-300 p-2 text-sm cursor-grab hover:border-primary/40 transition-all duration-200 flex items-center gap-2';
@@ -1611,8 +1691,26 @@ function convertBulletsToPills(stepId, text) {
       <button class="delete-pill text-xs hover:text-error ml-2 flex-shrink-0 opacity-70 hover:opacity-100 transition-opacity" data-step="${stepId}" data-index="${index}">✕</button>
     `;
     pillsList.appendChild(pill);
+    const occ = newIndexByOccurrence[bullet] || 0;
+    newIndexByOccurrence[bullet] = occ + 1;
+    newIndexMap[`${bullet}__${occ}`] = index;
   });
   
+  // Compute mapping oldIndex -> newIndex using (text, occurrence)
+  const oldToNew = {};
+  const seenOccurrence = {};
+  oldBullets.forEach((t, oldIdx) => {
+    const occ = seenOccurrence[t] || 0;
+    seenOccurrence[t] = occ + 1;
+    const key = `${t}__${occ}`;
+    if (key in newIndexMap) {
+      oldToNew[oldIdx] = newIndexMap[key];
+    }
+  });
+
+  // Apply mapping to images for this step
+  updateImagesForPillReorder(stepId, oldToNew);
+
   // Add drag and drop functionality
   setupPillDragAndDrop(stepId);
 }
@@ -1623,6 +1721,7 @@ function setupPillDragAndDrop(stepId) {
   if (!pillsList) return;
   
   let draggedPill = null;
+  let snapshotOrder = [];
   
   // Get all pills in current order
   function getAllPills() {
@@ -1651,6 +1750,11 @@ function setupPillDragAndDrop(stepId) {
     if (e.target.closest('.draggable-pill')) {
       draggedPill = e.target.closest('.draggable-pill');
       e.target.style.opacity = '0.5';
+      // Snapshot original indices before any movement
+      snapshotOrder = getAllPills();
+      snapshotOrder.forEach((pill, idx) => {
+        pill.setAttribute('data-old-index', pill.getAttribute('data-index') || idx);
+      });
     }
   });
   
@@ -1659,6 +1763,22 @@ function setupPillDragAndDrop(stepId) {
     if (e.target.closest('.draggable-pill')) {
       e.target.style.opacity = '';
       draggedPill = null;
+      // Build mapping oldIndex -> newIndex
+      const mapping = {};
+      const current = getAllPills();
+      current.forEach((pill, newIdx) => {
+        const oldIdxStr = pill.getAttribute('data-old-index');
+        if (oldIdxStr !== null) {
+          const oldIdx = parseInt(oldIdxStr, 10);
+          if (!Number.isNaN(oldIdx) && oldIdx !== newIdx) {
+            mapping[oldIdx] = newIdx;
+          }
+          pill.removeAttribute('data-old-index');
+        }
+      });
+      if (Object.keys(mapping).length > 0) {
+        updateImagesForPillReorder(stepId, mapping);
+      }
     }
   });
   
@@ -1689,6 +1809,42 @@ function setupPillDragAndDrop(stepId) {
       e.preventDefault();
     }
   });
+}
+
+// Update image substep indices for a step using an old->new index mapping
+async function updateImagesForPillReorder(stepId, oldToNewMap) {
+  try {
+    const imgGrid = document.getElementById(`imgs-${stepId}`);
+    if (!imgGrid) return;
+    const imgs = Array.from(imgGrid.querySelectorAll('.draggable-img'));
+    const base = window.location.pathname.replace(/\/$/, '/')
+      .replace(/(\d+)\/$/.test(window.location.pathname) ? /(\d+)\/$/ : /$/, `${stepId}/`);
+    for (const imgEl of imgs) {
+      const imgId = imgEl.getAttribute('data-img-id');
+      const substepStr = imgEl.getAttribute('data-substep-index');
+      if (substepStr === null || substepStr === '') continue;
+      const oldIdx = parseInt(substepStr, 10);
+      if (Number.isNaN(oldIdx)) continue;
+      if (oldToNewMap.hasOwnProperty(oldIdx)) {
+        const newIdx = oldToNewMap[oldIdx];
+        // Update server
+        const url = base.replace(/(\d+)\/$/.test(base) ? /(\d+)\/$/ : /$/, '') + `steps/${stepId}/images/${imgId}/update-substep/`;
+        await fetch(url, {
+          method: 'POST',
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': getCSRFToken(),
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ substep_index: newIdx })
+        });
+        // Update DOM attribute
+        imgEl.setAttribute('data-substep-index', String(newIdx));
+      }
+    }
+  } catch (err) {
+    console.error('Failed to update image substep indices after reorder:', err);
+  }
 }
 
 // Update pill numbers after reordering

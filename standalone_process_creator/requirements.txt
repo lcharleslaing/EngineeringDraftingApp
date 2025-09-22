@@ -4,3 +4,4 @@ xhtml2pdf>=0.2.11
 python-docx>=0.8.11
 pillow>=10.0.0
 python-dotenv>=1.0.0
+PyMuPDF>=1.23.0

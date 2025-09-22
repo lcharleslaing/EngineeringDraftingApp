@@ -23,6 +23,24 @@ from urllib.parse import quote
 import subprocess
 import tempfile
 
+# Optional PDF rendering (to embed PDF pages as images in Word)
+def _render_pdf_pages_to_images(pdf_path: str):
+    images = []
+    try:
+        import fitz  # PyMuPDF
+        doc = fitz.open(pdf_path)
+        try:
+            for page in doc:
+                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+                img_bytes = pix.tobytes("png")
+                bio = BytesIO(img_bytes)
+                images.append(bio)
+        finally:
+            doc.close()
+    except Exception:
+        return []
+    return images
+
 
 def markdown_to_plain_text(text):
     """Convert basic Markdown formatting to plain text with proper formatting"""
@@ -180,6 +198,44 @@ def module_create(request):
         return JsonResponse({"ok": True, "id": existing.id, "name": existing.name})
     module = Module.objects.create(name=name, description=description)
     return JsonResponse({"ok": True, "id": module.id, "name": module.name})
+
+
+@login_required
+@require_app_access('process_creator', action='view')
+def module_manage(request):
+    modules = Module.objects.all().order_by('name')
+    return render(request, 'process_creator/modules.html', {"modules": modules})
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def module_update(request, module_id: int):
+    module = get_object_or_404(Module, id=module_id)
+    data = json.loads(request.body or '{}') if request.headers.get('Content-Type','').startswith('application/json') else request.POST
+    name = (data.get('name') or '').strip()
+    description = (data.get('description') or '').strip()
+    if not name:
+        return JsonResponse({"ok": False, "error": "Name is required"}, status=400)
+    # Prevent duplicate names
+    if Module.objects.exclude(id=module.id).filter(name__iexact=name).exists():
+        return JsonResponse({"ok": False, "error": "A module with this name already exists"}, status=400)
+    module.name = name
+    module.description = description
+    module.save()
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def module_delete(request, module_id: int):
+    module = get_object_or_404(Module, id=module_id)
+    # Optional: refuse delete if in use
+    if Process.objects.filter(module=module).exists():
+        return JsonResponse({"ok": False, "error": "Module is assigned to one or more processes"}, status=400)
+    module.delete()
+    return JsonResponse({"ok": True})
 
 
 @login_required
@@ -633,6 +689,7 @@ def process_word(request, pk: int):
     show_analysis = request.GET.get('show_analysis', 'false').lower() == 'true'
     show_attachments = request.GET.get('show_attachments', 'false').lower() == 'true'
     show_summary = request.GET.get('show_summary', 'false').lower() == 'true'
+    show_pdfs = request.GET.get('show_pdfs', 'false').lower() == 'true'
     
     # Create a new Word document
     doc = Document()
@@ -653,6 +710,34 @@ def process_word(request, pk: int):
         p = doc.add_paragraph(process.description)
         p.paragraph_format.space_after = Inches(0.1)
         p.paragraph_format.line_spacing = 1.15
+    
+    # Add PDFs before steps if toggle is on
+    if show_pdfs:
+        pdf_files = []
+        for step in steps:
+            for file in step.files.all():
+                if file.file.name.lower().endswith('.pdf'):
+                    pdf_files.append(file)
+        
+        if pdf_files:
+            doc.add_heading('PDF Documents', level=1)
+            for pdf_file in pdf_files:
+                try:
+                    pdf_path = os.path.join(settings.MEDIA_ROOT, str(pdf_file.file))
+                    if os.path.exists(pdf_path):
+                        pages = _render_pdf_pages_to_images(pdf_path)
+                        if pages:
+                            for img_io in pages:
+                                p = doc.add_paragraph()
+                                r = p.add_run()
+                                r.add_picture(img_io, width=Inches(6))
+                                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        else:
+                            # Fallback: show filename if rendering unavailable
+                            doc.add_paragraph(f"PDF: {os.path.basename(pdf_file.file.name)}")
+                except Exception:
+                    # If anything fails, add a reference
+                    doc.add_paragraph(f"PDF: {os.path.basename(pdf_file.file.name)}")
     
     # Add steps (always show steps as they are core content)
     if steps.exists():
@@ -753,13 +838,16 @@ def process_word(request, pk: int):
     doc.save(doc_io)
     doc_io.seek(0)
     
-    # Generate filename with process title and timestamp
+    # Generate filename with module (if any), process title and timestamp
     from datetime import datetime
     from urllib.parse import quote
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    safe_title = "".join(c for c in process.name if c.isalnum() or c in (' ', '-', '_')).rstrip()
-    safe_title = safe_title.replace(' ', '-')
-    filename = f"Process-{safe_title}-{timestamp}.docx"
+    safe_process = "".join(c for c in process.name if c.isalnum() or c in (' ', '-', '_')).rstrip().replace(' ', '-')
+    if process.module:
+        safe_module = "".join(c for c in process.module.name if c.isalnum() or c in (' ', '-', '_')).rstrip().replace(' ', '-')
+        filename = f"{safe_module}-{safe_process}-{timestamp}.docx"
+    else:
+        filename = f"Process-{safe_process}-{timestamp}.docx"
     
     response = HttpResponse(doc_io.getvalue(), content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
     response['Content-Disposition'] = f'attachment; filename="{quote(filename)}"'
@@ -1305,6 +1393,7 @@ def bulk_word(request):
     show_analysis = request.GET.get('show_analysis', 'false').lower() == 'true'
     show_summary = request.GET.get('show_summary', 'false').lower() == 'true'
     show_attachments = request.GET.get('show_attachments', 'false').lower() == 'true'
+    show_pdfs = request.GET.get('show_pdfs', 'false').lower() == 'true'
 
     # Add each process
     for i, process in enumerate(processes, 1):
@@ -1313,6 +1402,33 @@ def bulk_word(request):
         
         # Process name
         process_heading = doc.add_heading(f'{i}. {process.name}', level=1)
+        
+        # Add PDFs before steps if toggle is on
+        if show_pdfs:
+            pdf_files = []
+            for step in process.steps.all():
+                for file in step.files.all():
+                    if file.file.name.lower().endswith('.pdf'):
+                        pdf_files.append(file)
+            
+            if pdf_files:
+                doc.add_heading('PDF Documents', level=2)
+                for pdf_file in pdf_files:
+                    try:
+                        pdf_path = os.path.join(settings.MEDIA_ROOT, str(pdf_file.file))
+                        if os.path.exists(pdf_path):
+                            pages = _render_pdf_pages_to_images(pdf_path)
+                            if pages:
+                                for img_io in pages:
+                                    p = doc.add_paragraph()
+                                    r = p.add_run()
+                                    r.add_picture(img_io, width=Inches(6))
+                                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            else:
+                                doc.add_paragraph(f"PDF: {os.path.basename(pdf_file.file.name)}")
+                    except Exception:
+                        # If PDF can't be embedded, add a reference
+                        doc.add_paragraph(f"PDF: {os.path.basename(pdf_file.file.name)}")
         
         # Summary (Markdown -> Word)
         if show_summary and process.summary:
@@ -1433,7 +1549,25 @@ def bulk_word(request):
     
     from datetime import datetime
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    filename = f"Bulk-Process-Report-{timestamp}.docx"
+    # Prefer module name in filename if all processes share one module or module filter provided
+    module_name = None
+    selected_module_id = request.GET.get('module')
+    if selected_module_id:
+        try:
+            module_obj = Module.objects.get(id=selected_module_id)
+            module_name = module_obj.name
+        except Module.DoesNotExist:
+            module_name = None
+    if module_name is None:
+        # Derive common module if all selected processes share same module
+        modules = list({p.module.name for p in processes if p.module is not None})
+        if len(modules) == 1:
+            module_name = modules[0]
+    if module_name:
+        safe_module = "".join(c for c in module_name if c.isalnum() or c in (' ', '-', '_')).rstrip().replace(' ', '-')
+        filename = f"{safe_module}-{timestamp}.docx"
+    else:
+        filename = f"Bulk-Process-Report-{timestamp}.docx"
     
     response = HttpResponse(doc_io.getvalue(), content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
     response['Content-Disposition'] = f'attachment; filename="{quote(filename)}"'

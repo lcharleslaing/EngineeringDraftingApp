@@ -9,6 +9,7 @@
     <button id="print-all" class="btn">Print All</button>
     <button id="export-pdf-all" class="btn btn-outline">Export PDF</button>
     <button id="export-word-all" class="btn btn-outline">Export Word</button>
+    <a href="{% url 'process_creator:module_manage' %}" class="btn btn-ghost">Manage Modules</a>
     <a href="{% url 'process_creator:create' %}" class="btn btn-primary">New Process</a>
   </div>
   </div>
@@ -38,6 +39,7 @@
       <label class="label cursor-pointer gap-2"><span class="label-text">Analysis</span><input id="toggle-analysis-all" type="checkbox" class="toggle toggle-sm" /></label>
       <label class="label cursor-pointer gap-2"><span class="label-text">Description</span><input id="toggle-description-all" type="checkbox" class="toggle toggle-sm" /></label>
       <label class="label cursor-pointer gap-2"><span class="label-text">Notes</span><input id="toggle-notes-all" type="checkbox" class="toggle toggle-sm" /></label>
+      <label class="label cursor-pointer gap-2"><span class="label-text">Show PDFs</span><input id="toggle-pdfs-all" type="checkbox" class="toggle toggle-sm" /></label>
     </div>
   </div>
 
@@ -333,6 +335,7 @@ document.getElementById('export-pdf-all').addEventListener('click', ()=>{
   params.append('show_analysis', document.getElementById('toggle-analysis-all').checked);
   params.append('show_description', document.getElementById('toggle-description-all').checked);
   params.append('show_notes', document.getElementById('toggle-notes-all').checked);
+  params.append('show_pdfs', document.getElementById('toggle-pdfs-all').checked);
   
   if (selectedHistory.length > 0) {
     params.append('include_history', 'true');
@@ -364,6 +367,7 @@ document.getElementById('export-word-all').addEventListener('click', ()=>{
   params.append('show_analysis', document.getElementById('toggle-analysis-all').checked);
   params.append('show_description', document.getElementById('toggle-description-all').checked);
   params.append('show_notes', document.getElementById('toggle-notes-all').checked);
+  params.append('show_pdfs', document.getElementById('toggle-pdfs-all').checked);
   
   if (selectedHistory.length > 0) {
     params.append('include_history', 'true');
