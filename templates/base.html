@@ -34,10 +34,15 @@
                             <label for="left-drawer" class="btn btn-ghost btn-square" aria-label="Open left menu">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
                             </label>
-                            <a class="btn btn-ghost text-xl" href="{% url 'home' %}">
+                            <a class="btn btn-ghost text-xl hidden sm:flex" href="{% url 'home' %}">
                                 <i class="fas fa-drafting-compass mr-2"></i>
                                 Drafting Engineering Flow
                             </a>
+                            <!-- Mobile title -->
+                            <div class="sm:hidden flex flex-col">
+                                <span class="text-sm font-semibold">Drafting</span>
+                                <span class="text-xs opacity-70">Engineering Flow</span>
+                            </div>
                         </div>
                         
                         <div class="navbar-center hidden lg:flex">
@@ -64,16 +69,12 @@
                             </ul>
                         </div>
                         
-                        <div class="navbar-end gap-2">
-                            <!-- Right drawer toggle -->
-                            <label for="right-drawer" class="btn btn-ghost btn-square" aria-label="Open right menu">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6h12M6 12h12M6 18h12" /></svg>
-                            </label>
+                        <div class="navbar-end gap-1 sm:gap-2">
                             {% if user.is_authenticated %}
                                 <div class="dropdown dropdown-end">
                                     <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar">
-                                        <div class="w-10 rounded-full">
-                                            <div class="bg-primary text-primary-content rounded-full w-10 h-10 flex items-center justify-center">
+                                        <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-full">
+                                            <div class="bg-primary text-primary-content rounded-full w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center text-xs sm:text-sm">
                                                 {{ user.username|first|upper }}
                                             </div>
                                         </div>
@@ -94,8 +95,12 @@
                                     </ul>
                                 </div>
                             {% else %}
-                                <a class="btn btn-primary" href="{% url 'admin:login' %}">Login</a>
+                                <a class="btn btn-primary btn-sm sm:btn-md" href="{% url 'admin:login' %}">Login</a>
                             {% endif %}
+                            <!-- Right drawer toggle -->
+                            <label for="right-drawer" class="btn btn-ghost btn-square" aria-label="Open right menu">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6h12M6 12h12M6 18h12" /></svg>
+                            </label>
                         </div>
                     </div>
 
