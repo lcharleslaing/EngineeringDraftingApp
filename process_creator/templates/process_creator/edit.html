@@ -362,6 +362,9 @@
                 <button class="btn btn-sm btn-outline toggle-attachments" data-step="{{ step.id }}">
                   <span class="toggle-text">Show Attachments</span>
                 </button>
+                <button class="btn btn-sm btn-outline focus-step" data-step="{{ step.id }}">
+                  Focus This Only
+                </button>
               </div>
             </div>
           </div>
@@ -2176,6 +2179,82 @@ function setupScrollListener() {
 
 // Auto-compact mode during dragging - REMOVED
 // Users can manually toggle compact mode if needed for reordering
+
+// Focus This Only — show only one step, hide all else
+let focusedStepId = null;
+
+function enterFocusMode(stepId) {
+  focusedStepId = String(stepId);
+  // Hide non-focused step cards
+  document.querySelectorAll('#steps .step-card').forEach(card => {
+    if (card.dataset.id !== String(stepId)) {
+      card.style.display = 'none';
+    } else {
+      card.style.display = '';
+      // Scroll focused step into view gently
+      setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+    }
+  });
+  // Hide process-level sections
+  ['summary-section','description-section','notes-section','analysis-section'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  // Show floating exit button (create if needed)
+  let exitBtn = document.getElementById('exit-focus-btn');
+  if (!exitBtn) {
+    exitBtn = document.createElement('button');
+    exitBtn.id = 'exit-focus-btn';
+    exitBtn.className = 'btn btn-outline btn-sm fixed top-3 right-3 z-50';
+    exitBtn.textContent = 'Exit Focus';
+    exitBtn.addEventListener('click', exitFocusMode);
+    document.body.appendChild(exitBtn);
+  } else {
+    exitBtn.style.display = '';
+  }
+  // Update button labels
+  document.querySelectorAll('#steps .focus-step').forEach(b => b.textContent = 'Focus This Only');
+  const activeBtn = document.querySelector(`#steps .focus-step[data-step="${CSS.escape(String(stepId))}"]`);
+  if (activeBtn) activeBtn.textContent = 'Unfocus';
+}
+
+function exitFocusMode() {
+  focusedStepId = null;
+  // Show all step cards
+  document.querySelectorAll('#steps .step-card').forEach(card => {
+    card.style.display = '';
+  });
+  // Re-apply all current toggle states after layout is restored
+  const applyAllVisibility = () => {
+    try { applySummaryVisibility && applySummaryVisibility(); } catch(_) {}
+    try { applyDescriptionVisibility && applyDescriptionVisibility(); } catch(_) {}
+    try { applyNotesVisibility && applyNotesVisibility(); } catch(_) {}
+    try { applyAnalysisVisibility && applyAnalysisVisibility(); } catch(_) {}
+    try { applyAttachmentVisibility && applyAttachmentVisibility(); } catch(_) {}
+  };
+  // Apply immediately and again on next tick to avoid any intermediate flashes
+  applyAllVisibility();
+  setTimeout(applyAllVisibility, 50);
+  // Hide exit button if present
+  const exitBtn = document.getElementById('exit-focus-btn');
+  if (exitBtn) exitBtn.style.display = 'none';
+  // Reset button labels
+  document.querySelectorAll('#steps .focus-step').forEach(b => b.textContent = 'Focus This Only');
+}
+
+// Wire up per-step Focus button (event delegation)
+document.getElementById('steps').addEventListener('click', (e) => {
+  const btn = e.target.closest('.focus-step');
+  if (!btn) return;
+  e.preventDefault();
+  const stepId = btn.getAttribute('data-step');
+  if (!stepId) return;
+  if (focusedStepId && String(stepId) === String(focusedStepId)) {
+    exitFocusMode();
+  } else {
+    enterFocusMode(stepId);
+  }
+});
 </script>
 {% endblock %}
 
