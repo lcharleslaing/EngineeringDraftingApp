@@ -1084,6 +1084,17 @@ document.addEventListener('click', (e) => {
 
 // Image grid click handler removed - only "Add images" button opens file dialog
 
+// Track last focused/clicked step for paste fallback
+let lastFocusedStepId = null;
+document.addEventListener('focusin', (e) => {
+  const card = e.target && e.target.closest && e.target.closest('.step-card');
+  if (card) lastFocusedStepId = card.dataset.id;
+});
+document.getElementById('steps').addEventListener('mousedown', (e) => {
+  const card = e.target && e.target.closest && e.target.closest('.step-card');
+  if (card) lastFocusedStepId = card.dataset.id;
+});
+
 // Paste handler on window - attach to nearest focused step card
 document.addEventListener('paste', async (e)=>{
   const items = e.clipboardData && e.clipboardData.items; if (!items) return;
@@ -1108,9 +1119,33 @@ document.addEventListener('paste', async (e)=>{
   }
   await textPromise;
   // find focused step
-  const active = document.activeElement.closest('.card');
-  if (!active) return;
-  const stepId = active.dataset.id;
+  const activeCard = document.activeElement && document.activeElement.closest ? document.activeElement.closest('.step-card') : null;
+  let stepId = activeCard ? activeCard.dataset.id : (lastFocusedStepId || null);
+  if (!stepId) {
+    showToast('Click inside a step before pasting.', 'error');
+    return;
+  }
+  // Determine substep index from caret if inside the step textarea
+  let substepIndex = null;
+  const ta = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('step-details') ? document.activeElement : null;
+  if (ta) {
+    try {
+      const caret = ta.selectionStart || 0;
+      const textUpToCaret = ta.value.slice(0, caret);
+      const allLines = ta.value.split('\n');
+      const caretLineNumber = textUpToCaret.split('\n').length - 1; // 0-based
+      // Compute index among bullet lines (lines starting with '-') up to caret line
+      let idx = -1;
+      for (let i = 0; i <= caretLineNumber && i < allLines.length; i++) {
+        const isBullet = /^\s*-\s+/.test(allLines[i]);
+        if (isBullet) idx++;
+      }
+      // Only set if the caret is within a bullet line
+      if (/^\s*-\s+/.test(allLines[Math.max(0, caretLineNumber)] || '')) {
+        substepIndex = idx >= 0 ? idx : null;
+      }
+    } catch(_) {}
+  }
   // If CAD pasted (DWG / IDW)
   if (cadFile) {
     const fd = new FormData(); fd.append('file', cadFile);
@@ -1140,6 +1175,7 @@ document.addEventListener('paste', async (e)=>{
   // If image pasted
   if (file) {
     const fd = new FormData(); fd.append('file', file);
+    if (substepIndex !== null && substepIndex !== undefined) fd.append('substep_index', String(substepIndex));
     const res = await fetch(base + 'steps/' + stepId + '/images/upload/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}, body: fd});
     const data = await res.json(); if (data.ok) addThumb(stepId, data);
     return;

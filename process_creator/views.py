@@ -389,9 +389,17 @@ def step_image_upload(request, pk: int, step_id: int):
     file = request.FILES.get('image') or request.FILES.get('file')
     if not file:
         return JsonResponse({"ok": False, "error": "No image provided"}, status=400)
+    # Optional substep index (0-based) to associate image with a bullet line
+    substep_index = request.POST.get('substep_index')
+    try:
+        substep_index = int(substep_index) if substep_index is not None and substep_index != '' else None
+        if substep_index is not None and substep_index < 0:
+            substep_index = None
+    except (TypeError, ValueError):
+        substep_index = None
     max_order = step.images.aggregate(models.Max('order')).get('order__max') or 0
-    img = StepImage.objects.create(step=step, image=file, order=max_order + 1)
-    return JsonResponse({"ok": True, "id": img.id, "url": img.image.url, "order": img.order})
+    img = StepImage.objects.create(step=step, image=file, order=max_order + 1, substep_index=substep_index)
+    return JsonResponse({"ok": True, "id": img.id, "url": img.image.url, "order": img.order, "substep_index": img.substep_index})
 
 
 @login_required
@@ -610,48 +618,78 @@ def process_word(request, pk: int):
             # Add step title
             step_heading = doc.add_heading(f'{step.order}. {step.title}', level=2)
             
-            # Add step details
+            # Add step details, and place images under matching substeps if tagged
             if step.details:
-                p = doc.add_paragraph(step.details)
-                p.paragraph_format.space_after = Inches(0.1)
-                p.paragraph_format.line_spacing = 1.15
+                lines = step.details.split('\n')
+                bullet_idx = -1
+                for raw in lines:
+                    line = raw.rstrip('\r')
+                    is_bullet = bool(re.match(r'^\s*-\s+', line))
+                    if is_bullet:
+                        bullet_idx += 1
+                    # Paragraph for this line
+                    p = doc.add_paragraph(line)
+                    p.paragraph_format.space_after = Inches(0.05)
+                    p.paragraph_format.line_spacing = 1.15
+                    # If bullet, render any images linked to this bullet below it
+                    if is_bullet and step.images.exists():
+                        for img in step.images.all():
+                            if img.substep_index == bullet_idx:
+                                try:
+                                    img_path = os.path.join(settings.MEDIA_ROOT, str(img.image))
+                                    if os.path.exists(img_path):
+                                        table = doc.add_table(rows=1, cols=1)
+                                        table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                        cell = table.cell(0, 0)
+                                        cell.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                        paragraph = cell.paragraphs[0]
+                                        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                        run = paragraph.add_run()
+                                        run.add_picture(img_path, width=Inches(6))
+                                        from docx.oxml.shared import OxmlElement, qn
+                                        tc = cell._tc
+                                        tcPr = tc.get_or_add_tcPr()
+                                        tcBorders = OxmlElement('w:tcBorders')
+                                        for border_name in ['top', 'left', 'bottom', 'right']:
+                                            border = OxmlElement(f'w:{border_name}')
+                                            border.set(qn('w:val'), 'single')
+                                            border.set(qn('w:sz'), '12')
+                                            border.set(qn('w:space'), '0')
+                                            border.set(qn('w:color'), '333333')
+                                            tcBorders.append(border)
+                                        tcPr.append(tcBorders)
+                                except Exception:
+                                    pass
             
-            # Add step images
+            # Any remaining images without substep_index: render after details
             if step.images.exists():
                 for img in step.images.all():
-                    try:
-                        # Get the full path to the image
-                        img_path = os.path.join(settings.MEDIA_ROOT, str(img.image))
-                        if os.path.exists(img_path):
-                            # Add image to document with border using table
-                            table = doc.add_table(rows=1, cols=1)
-                            table.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                            cell = table.cell(0, 0)
-                            cell.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
-                            
-                            # Add image to cell
-                            paragraph = cell.paragraphs[0]
-                            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                            run = paragraph.add_run()
-                            run.add_picture(img_path, width=Inches(6))
-                            
-                            # Add border to table cell
-                            from docx.oxml.shared import OxmlElement, qn
-                            tc = cell._tc
-                            tcPr = tc.get_or_add_tcPr()
-                            tcBorders = OxmlElement('w:tcBorders')
-                            for border_name in ['top', 'left', 'bottom', 'right']:
-                                border = OxmlElement(f'w:{border_name}')
-                                border.set(qn('w:val'), 'single')
-                                border.set(qn('w:sz'), '12')  # 3pt border
-                                border.set(qn('w:space'), '0')
-                                border.set(qn('w:color'), '333333')
-                                tcBorders.append(border)
-                            tcPr.append(tcBorders)
-                            
-                    except Exception as e:
-                        # If image can't be added, just continue
-                        pass
+                    if img.substep_index is None:
+                        try:
+                            img_path = os.path.join(settings.MEDIA_ROOT, str(img.image))
+                            if os.path.exists(img_path):
+                                table = doc.add_table(rows=1, cols=1)
+                                table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                cell = table.cell(0, 0)
+                                cell.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                paragraph = cell.paragraphs[0]
+                                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                run = paragraph.add_run()
+                                run.add_picture(img_path, width=Inches(6))
+                                from docx.oxml.shared import OxmlElement, qn
+                                tc = cell._tc
+                                tcPr = tc.get_or_add_tcPr()
+                                tcBorders = OxmlElement('w:tcBorders')
+                                for border_name in ['top', 'left', 'bottom', 'right']:
+                                    border = OxmlElement(f'w:{border_name}')
+                                    border.set(qn('w:val'), 'single')
+                                    border.set(qn('w:sz'), '12')
+                                    border.set(qn('w:space'), '0')
+                                    border.set(qn('w:color'), '333333')
+                                    tcBorders.append(border)
+                                tcPr.append(tcBorders)
+                        except Exception:
+                            pass
     
     # Add notes
     if process.notes:

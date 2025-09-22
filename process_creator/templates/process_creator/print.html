@@ -96,13 +96,38 @@
     {% for step in process.steps.all %}
       <li>
         <div class="step-title">{{ step.title }}</div>
-        {% if step.details %}<div class="step-details">{{ step.details|linebreaksbr }}</div>{% endif %}
-        {% if step.images.all %}
-          <div class="img-container">
-            {% for img in step.images.all %}
-              <img src="{{ img.image.url }}" alt="Step {{ step.order }} image {{ forloop.counter }}" />
-            {% endfor %}
-          </div>
+        {% if step.details %}
+          {# Split details into lines, render bullets and attach images for each substep if substep_index matches #}
+          {% with lines=step.details.splitlines %}
+            <div class="step-details">
+              {% for line in lines %}
+                {% if line.strip|slice:':1' == '-' %}
+                  <div>{{ line|linebreaksbr }}</div>
+                  {% with idx=forloop.counter0 %}
+                    {% if step.images.all %}
+                      {% for img in step.images.all %}
+                        {% if img.substep_index == idx %}
+                          <div class="img-container">
+                            <img src="{{ img.image.url }}" alt="Step {{ step.order }} substep {{ idx|add:1 }} image" />
+                          </div>
+                        {% endif %}
+                      {% endfor %}
+                    {% endif %}
+                  {% endwith %}
+                {% else %}
+                  <div>{{ line|linebreaksbr }}</div>
+                {% endif %}
+              {% endfor %}
+            </div>
+          {% endwith %}
+        {% else %}
+          {% if step.images.all %}
+            <div class="img-container">
+              {% for img in step.images.all %}
+                <img src="{{ img.image.url }}" alt="Step {{ step.order }} image {{ forloop.counter }}" />
+              {% endfor %}
+            </div>
+          {% endif %}
         {% endif %}
       </li>
     {% endfor %}

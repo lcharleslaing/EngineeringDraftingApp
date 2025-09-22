@@ -63,6 +63,7 @@ class StepImage(models.Model):
     step = models.ForeignKey(Step, related_name="images", on_delete=models.CASCADE)
     image = models.ImageField(upload_to="process_screenshots/")
     order = models.PositiveIntegerField(default=1)
+    substep_index = models.PositiveIntegerField(null=True, blank=True, help_text="0-based index of the bullet (substep) within step.details")
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
