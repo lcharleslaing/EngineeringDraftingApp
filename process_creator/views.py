@@ -11,7 +11,7 @@ from django.utils import timezone
 from .models import Module, Process, Step, StepImage, StepLink, StepFile, AIInteraction
 from xhtml2pdf import pisa
 from docx import Document
-from docx.shared import Inches
+from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import os
 import json
@@ -496,6 +496,22 @@ def step_image_update_substep(request, pk: int, step_id: int, image_id: int):
 @login_required
 @require_app_access('process_creator', action='edit')
 @require_POST
+def step_images_clear_substeps(request, pk: int, step_id: int):
+    """Clear substep_index for all images in a single step."""
+    process = get_object_or_404(Process, pk=pk)
+    step = get_object_or_404(Step, pk=step_id, process=process)
+    updated = 0
+    for img in step.images.all():
+        if img.substep_index is not None:
+            img.substep_index = None
+            img.save(update_fields=["substep_index"])
+            updated += 1
+    return JsonResponse({"ok": True, "cleared": updated})
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
 def step_link_add(request, pk: int, step_id: int):
     process = get_object_or_404(Process, pk=pk)
     step = get_object_or_404(Step, pk=step_id, process=process)
@@ -693,10 +709,29 @@ def process_word(request, pk: int):
     
     # Create a new Word document
     doc = Document()
+    # Remove default empty first paragraph to avoid accidental blank first page
+    try:
+        if len(doc.paragraphs) and not doc.paragraphs[0].text.strip():
+            p = doc.paragraphs[0]
+            p._element.getparent().remove(p._element)
+    except Exception:
+        pass
+    # Normalize section settings to avoid leading blank due to odd-page starts
+    try:
+        from docx.enum.section import WD_SECTION_START
+        for section in doc.sections:
+            section.start_type = WD_SECTION_START.NEW_PAGE
+            section.different_first_page_header_footer = False
+    except Exception:
+        pass
     
-    # Add title
-    title = doc.add_heading(process.name, 0)
+    # Add title without forcing a title-page behavior
+    title = doc.add_paragraph(process.name, style='Heading 1')
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    try:
+        title.paragraph_format.page_break_before = False
+    except Exception:
+        pass
     
     # Add summary (respect toggle)
     if show_summary and process.summary:
@@ -746,7 +781,7 @@ def process_word(request, pk: int):
             # Add step title
             step_heading = doc.add_heading(f'{step.order}. {step.title}', level=2)
             
-            # Add step details, and place images under matching substeps if tagged
+            # Add step details, and for bullets place images with caption under each image
             if step.details:
                 lines = step.details.split('\n')
                 bullet_idx = -1
@@ -755,14 +790,13 @@ def process_word(request, pk: int):
                     is_bullet = bool(re.match(r'^\s*-\s+', line))
                     if is_bullet:
                         bullet_idx += 1
-                    # Paragraph for this line
-                    p = doc.add_paragraph(line)
-                    p.paragraph_format.space_after = Inches(0.05)
-                    p.paragraph_format.line_spacing = 1.15
-                    # If bullet, render any images linked to this bullet below it (respect attachments toggle)
+                    bullet_text_match = re.match(r'^\s*-\s+(.*)$', line)
+                    bullet_text = bullet_text_match.group(1) if bullet_text_match else line
+                    # If bullet and we should include attachments, render images with caption (caption under image)
                     if is_bullet and show_attachments and step.images.exists():
-                        for img in step.images.all():
-                            if img.substep_index == bullet_idx:
+                        related = [img for img in step.images.all() if img.substep_index == bullet_idx]
+                        if related:
+                            for img in related:
                                 try:
                                     img_path = os.path.join(settings.MEDIA_ROOT, str(img.image))
                                     if os.path.exists(img_path):
@@ -770,24 +804,48 @@ def process_word(request, pk: int):
                                         table.alignment = WD_ALIGN_PARAGRAPH.CENTER
                                         cell = table.cell(0, 0)
                                         cell.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                        # Image paragraph
                                         paragraph = cell.paragraphs[0]
                                         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                        paragraph.paragraph_format.keep_with_next = True
                                         run = paragraph.add_run()
                                         run.add_picture(img_path, width=Inches(6))
+                                        # Caption paragraph (bullet text beneath image)
+                                        cap = cell.add_paragraph(bullet_text)
+                                        cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                        cap.paragraph_format.space_before = Pt(6)
+                                        cap.paragraph_format.line_spacing = 1.15
+                                        cap.paragraph_format.keep_together = True
+                                        cap.paragraph_format.keep_with_next = False
+                                        # Prevent table row from splitting across pages
                                         from docx.oxml.shared import OxmlElement, qn
+                                        tr = table.rows[0]._tr
+                                        trPr = tr.get_or_add_trPr()
+                                        cantSplit = OxmlElement('w:cantSplit')
+                                        trPr.append(cantSplit)
+                                        # Slightly larger font for visibility
+                                        for r in cap.runs:
+                                            r.font.size = Pt(12)
+                                        # Add thin border around the image container cell to separate visually
                                         tc = cell._tc
                                         tcPr = tc.get_or_add_tcPr()
                                         tcBorders = OxmlElement('w:tcBorders')
                                         for border_name in ['top', 'left', 'bottom', 'right']:
                                             border = OxmlElement(f'w:{border_name}')
                                             border.set(qn('w:val'), 'single')
-                                            border.set(qn('w:sz'), '12')
+                                            border.set(qn('w:sz'), '8')
                                             border.set(qn('w:space'), '0')
-                                            border.set(qn('w:color'), '333333')
+                                            border.set(qn('w:color'), 'CCCCCC')
                                             tcBorders.append(border)
                                         tcPr.append(tcBorders)
                                 except Exception:
                                     pass
+                            # We have rendered bullets as captions under each image; skip separate bullet paragraph
+                            continue
+                    # Default: render the line as normal paragraph
+                    p = doc.add_paragraph(line)
+                    p.paragraph_format.space_after = Inches(0.05)
+                    p.paragraph_format.line_spacing = 1.15
             
             # Any remaining images without substep_index: render after details (respect attachments toggle)
             if show_attachments and step.images.exists():
@@ -835,6 +893,8 @@ def process_word(request, pk: int):
     # Save to BytesIO
     from io import BytesIO
     doc_io = BytesIO()
+    # Ensure doc starts content immediately (avoid stray leading section break)
+    doc.settings.odd_and_even_pages_header_footer = False
     doc.save(doc_io)
     doc_io.seek(0)
     
@@ -1382,10 +1442,29 @@ def bulk_word(request):
             history_data = []
     
     doc = Document()
+    # Remove default empty first paragraph to avoid accidental blank first page
+    try:
+        if len(doc.paragraphs) and not doc.paragraphs[0].text.strip():
+            p = doc.paragraphs[0]
+            p._element.getparent().remove(p._element)
+    except Exception:
+        pass
+    # Normalize section settings to avoid leading blank due to odd-page starts
+    try:
+        from docx.enum.section import WD_SECTION_START
+        for section in doc.sections:
+            section.start_type = WD_SECTION_START.NEW_PAGE
+            section.different_first_page_header_footer = False
+    except Exception:
+        pass
     
-    # Add title
-    title = doc.add_heading('Bulk Process Report', 0)
+    # Add title without using the Title style (which can create a title page)
+    title = doc.add_paragraph('Bulk Process Report', style='Heading 1')
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    try:
+        title.paragraph_format.page_break_before = False
+    except Exception:
+        pass
     
     # Read toggle states (module-level controls)
     show_description = request.GET.get('show_description', 'false').lower() == 'true'
@@ -1456,12 +1535,12 @@ def bulk_word(request):
                         is_bullet = bool(re.match(r'^\s*-\s+', line))
                         if is_bullet:
                             bullet_idx += 1
-                        p = doc.add_paragraph(line)
-                        p.paragraph_format.space_after = Inches(0.05)
-                        p.paragraph_format.line_spacing = 1.15
+                        bullet_text_match = re.match(r'^\s*-\s+(.*)$', line)
+                        bullet_text = bullet_text_match.group(1) if bullet_text_match else line
                         if is_bullet and show_attachments and step.images.exists():
-                            for img in step.images.all():
-                                if img.substep_index == bullet_idx:
+                            related = [img for img in step.images.all() if img.substep_index == bullet_idx]
+                            if related:
+                                for img in related:
                                     try:
                                         img_path = os.path.join(settings.MEDIA_ROOT, str(img.image))
                                         if os.path.exists(img_path):
@@ -1471,22 +1550,40 @@ def bulk_word(request):
                                             cell.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
                                             paragraph = cell.paragraphs[0]
                                             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                            paragraph.paragraph_format.keep_with_next = True
                                             run = paragraph.add_run()
                                             run.add_picture(img_path, width=Inches(6))
+                                            cap = cell.add_paragraph(bullet_text)
+                                            cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                            cap.paragraph_format.space_before = Pt(6)
+                                            cap.paragraph_format.line_spacing = 1.15
+                                            cap.paragraph_format.keep_together = True
+                                            cap.paragraph_format.keep_with_next = False
+                                            # Prevent table row from splitting across pages
                                             from docx.oxml.shared import OxmlElement, qn
+                                            tr = table.rows[0]._tr
+                                            trPr = tr.get_or_add_trPr()
+                                            cantSplit = OxmlElement('w:cantSplit')
+                                            trPr.append(cantSplit)
+                                            for r in cap.runs:
+                                                r.font.size = Pt(12)
                                             tc = cell._tc
                                             tcPr = tc.get_or_add_tcPr()
                                             tcBorders = OxmlElement('w:tcBorders')
                                             for border_name in ['top', 'left', 'bottom', 'right']:
                                                 border = OxmlElement(f'w:{border_name}')
                                                 border.set(qn('w:val'), 'single')
-                                                border.set(qn('w:sz'), '12')
+                                                border.set(qn('w:sz'), '8')
                                                 border.set(qn('w:space'), '0')
-                                                border.set(qn('w:color'), '333333')
+                                                border.set(qn('w:color'), 'CCCCCC')
                                                 tcBorders.append(border)
                                             tcPr.append(tcBorders)
                                     except Exception:
                                         pass
+                                continue
+                        p = doc.add_paragraph(line)
+                        p.paragraph_format.space_after = Inches(0.05)
+                        p.paragraph_format.line_spacing = 1.15
                 # Any remaining images without substep_index
                 if show_attachments and step.images.exists():
                     for img in step.images.all():
@@ -1544,6 +1641,7 @@ def bulk_word(request):
                 add_markdown_to_word_doc(doc, content, level=3)
     
     doc_io = BytesIO()
+    doc.settings.odd_and_even_pages_header_footer = False
     doc.save(doc_io)
     doc_io.seek(0)
     

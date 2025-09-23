@@ -466,15 +466,15 @@
                 </span>
                 <input class="step-title input input-sm input-bordered flex-1" value="{{ step.title }}" required />
                 <div class="flex gap-1 step-buttons flex-shrink-0">
-                  <button class="btn btn-sm" data-insert="up" title="Add before">+ ☝️</button>
-                  <button class="btn btn-sm" data-insert="down" title="Add after">+ 👇</button>
+                  <button class="btn btn-sm" data-insert="up" title="Add before">+ Before</button>
+                  <button class="btn btn-sm" data-insert="down" title="Add after">+ After</button>
                   <button class="btn btn-sm btn-error step-delete">Delete</button>
                 </div>
               </div>
               <!-- Bullet Pills Container -->
               <div class="bullet-pills-container mt-3 mb-2" id="pills-{{ step.id }}">
                 <div class="text-sm opacity-70 mb-2">Bullet Points (drag to reorder)</div>
-                <div class="space-y-1" id="pills-list-{{ step.id }}">
+                <div class="pills-list grid grid-cols-2 md:grid-cols-3 gap-1 md:gap-2" id="pills-list-{{ step.id }}">
                   <!-- Pills will be dynamically added here -->
                 </div>
               </div>
@@ -536,6 +536,9 @@
                 </button>
                 <button class="btn btn-sm btn-outline toggle-attachments flex-1 sm:flex-none" data-step="{{ step.id }}">
                   <span class="toggle-text">Show Attachments</span>
+                </button>
+                <button class="btn btn-sm btn-outline clear-image-links flex-1 sm:flex-none" title="Clear Image Connections" data-step="{{ step.id }}">
+                  <i class="fas fa-unlink mr-1"></i> Clear Image Connections
                 </button>
                 <button class="btn btn-sm btn-outline toggle-pdfs-step flex-1 sm:flex-none" data-step="{{ step.id }}">
                   <span class="toggle-text">Show PDFs</span>
@@ -746,6 +749,29 @@ document.querySelectorAll('#steps .card').forEach(card=>{
     }
   });
   
+  // Track likely insertion bullet index based on caret position while editing
+  if (!window.bulletInsertHint) window.bulletInsertHint = {};
+  function getBulletIndexAtCaret(ta){
+    try {
+      const caret = ta.selectionStart || 0;
+      const before = ta.value.slice(0, caret).split('\n');
+      let idx = -1;
+      for (let i = 0; i < before.length; i++) {
+        const line = before[i].trimStart();
+        if (line.startsWith('- ')) idx++;
+      }
+      return idx; // -1 if none before caret
+    } catch(_) { return null; }
+  }
+  textarea.addEventListener('keyup', ()=>{
+    const idx = getBulletIndexAtCaret(textarea);
+    if (idx !== null && idx >= 0) window.bulletInsertHint[id] = idx;
+  });
+  textarea.addEventListener('click', ()=>{
+    const idx = getBulletIndexAtCaret(textarea);
+    if (idx !== null && idx >= 0) window.bulletInsertHint[id] = idx;
+  });
+  
   // Toggle attachments visibility (Links, Documents, Screenshots)
   const toggleAttachmentsBtn = card.querySelector('.toggle-attachments');
   const toggleAttachmentsText = toggleAttachmentsBtn.querySelector('.toggle-text');
@@ -781,6 +807,30 @@ document.querySelectorAll('#steps .card').forEach(card=>{
       togglePdfsText.textContent = isHidden ? 'Hide PDFs' : 'Show PDFs';
     }
   });
+
+  // Clear image connections for this step
+  const clearBtn = card.querySelector('.clear-image-links');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', async ()=>{
+      try {
+        const url = base + 'steps/' + id + '/images/clear-substeps/';
+        const res = await fetch(url, { method:'POST', headers:{ 'X-CSRFToken': getCookie('csrftoken') } });
+        const data = await res.json();
+        if (data && data.ok) {
+          // Reset data-substep-index attributes for images in this step
+          const imgGrid = document.getElementById('imgs-' + id);
+          if (imgGrid) {
+            imgGrid.querySelectorAll('.draggable-img').forEach(el => el.setAttribute('data-substep-index', ''));
+          }
+          // Provide a brief toast
+          showToast(`Cleared ${data.cleared || 0} image connection(s). Drag images to bullets to reassign.`);
+        }
+      } catch (err) {
+        console.error('Failed to clear image connections:', err);
+        showToast('Failed to clear image connections', 'error');
+      }
+    });
+  }
   
   
   card.querySelector('.step-delete').addEventListener('click', ()=>{
@@ -1600,6 +1650,7 @@ document.addEventListener('click', async (e)=>{
     pill.remove();
     updatePillNumbers(stepId);
     updateTextareaFromPills(stepId);
+      renderBulletImageBadges(stepId);
   }
 });
 
@@ -1618,6 +1669,8 @@ function addThumb(stepId, data){
   
   // Renumber all images after adding new one
   updateImageNumbers(container);
+  // Refresh bullet badges to reflect new connections
+  renderBulletImageBadges(stepId);
   
   // Event listener is now handled by event delegation above
 }
@@ -1682,11 +1735,12 @@ function convertBulletsToPills(stepId, text) {
   const newIndexMap = {};
   bullets.forEach((bullet, index) => {
     const pill = document.createElement('div');
-    pill.className = 'draggable-pill bg-base-100 border border-base-300 p-2 text-sm cursor-grab hover:border-primary/40 transition-all duration-200 flex items-center gap-2';
+    pill.className = 'draggable-pill bg-base-100 border border-base-300 p-1.5 md:p-2 text-sm cursor-grab hover:border-primary/40 transition-all duration-200 flex items-center gap-2';
     pill.setAttribute('draggable', 'true');
     pill.setAttribute('data-index', index);
     pill.innerHTML = `
       <span class="pill-number text-xs font-bold bg-primary text-primary-content px-2 py-1 rounded-full flex-shrink-0">${index + 1}</span>
+      <span class="linked-images ml-1 flex items-center gap-1"></span>
       <span class="pill-text text-sm leading-relaxed break-words flex-1">${bullet}</span>
       <button class="delete-pill text-xs hover:text-error ml-2 flex-shrink-0 opacity-70 hover:opacity-100 transition-opacity" data-step="${stepId}" data-index="${index}">✕</button>
     `;
@@ -1695,18 +1749,58 @@ function convertBulletsToPills(stepId, text) {
     newIndexByOccurrence[bullet] = occ + 1;
     newIndexMap[`${bullet}__${occ}`] = index;
   });
+  // Render image badges next to bullets showing linked image numbers
+  renderBulletImageBadges(stepId);
   
-  // Compute mapping oldIndex -> newIndex using (text, occurrence)
-  const oldToNew = {};
-  const seenOccurrence = {};
-  oldBullets.forEach((t, oldIdx) => {
-    const occ = seenOccurrence[t] || 0;
-    seenOccurrence[t] = occ + 1;
-    const key = `${t}__${occ}`;
-    if (key in newIndexMap) {
-      oldToNew[oldIdx] = newIndexMap[key];
+  // Compute mapping oldIndex -> newIndex via LCS-based diff with fallbacks
+  let oldToNew = {};
+  function lcsPairs(a, b){
+    const n = a.length, m = b.length;
+    const dp = Array.from({length:n+1}, ()=>Array(m+1).fill(0));
+    for (let i=1;i<=n;i++){
+      for (let j=1;j<=m;j++){
+        dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1]+1 : Math.max(dp[i-1][j], dp[i][j-1]);
+      }
     }
-  });
+    const pairs = [];
+    let i=n, j=m;
+    while(i>0 && j>0){
+      if (a[i-1] === b[j-1]){ pairs.push([i-1,j-1]); i--; j--; }
+      else if (dp[i-1][j] >= dp[i][j-1]) i--; else j--;
+    }
+    return pairs.reverse();
+  }
+  const pairs = lcsPairs(oldBullets, bullets);
+  if (Math.abs(bullets.length - oldBullets.length) === 1 && pairs.length){
+    // Determine insertion/deletion index from first gap in pairs
+    const inserted = bullets.length > oldBullets.length;
+    let idx = 0;
+    for (let k=0;k<=pairs.length;k++){
+      const prevOld = k?pairs[k-1][0]:-1;
+      const prevNew = k?pairs[k-1][1]:-1;
+      const nextOld = k<pairs.length?pairs[k][0]:oldBullets.length;
+      const nextNew = k<pairs.length?pairs[k][1]:bullets.length;
+      const oldGap = nextOld - prevOld - 1;
+      const newGap = nextNew - prevNew - 1;
+      if (inserted && newGap === 1 && oldGap === 0){ idx = prevNew + 1; break; }
+      if (!inserted && oldGap === 1 && newGap === 0){ idx = prevOld + 1; break; }
+    }
+    if (inserted){
+      for (let oi=0; oi<oldBullets.length; oi++) oldToNew[oi] = oi < idx ? oi : oi+1;
+    }else{
+      for (let oi=0; oi<oldBullets.length; oi++){
+        if (oi < idx) oldToNew[oi] = oi; else if (oi > idx) oldToNew[oi] = oi-1; // oi==idx deleted
+      }
+    }
+  } else {
+    // Many edits: map by text occurrences but do NOT attach images to brand new bullets
+    const seenOccurrence = {};
+    oldBullets.forEach((t, oldIdx) => {
+      const occ = seenOccurrence[t] || 0; seenOccurrence[t] = occ + 1;
+      const key = `${t}__${occ}`;
+      if (key in newIndexMap) oldToNew[oldIdx] = newIndexMap[key];
+    });
+  }
 
   // Apply mapping to images for this step
   updateImagesForPillReorder(stepId, oldToNew);
@@ -1779,12 +1873,21 @@ function setupPillDragAndDrop(stepId) {
       if (Object.keys(mapping).length > 0) {
         updateImagesForPillReorder(stepId, mapping);
       }
+  // Refresh badges after reordering
+  renderBulletImageBadges(stepId);
     }
   });
   
-  // Drag over
+  // Drag over with auto-scroll support at viewport edges
   pillsList.addEventListener('dragover', (e) => {
     e.preventDefault();
+    // Auto-scroll when near window edges to allow long lists
+    const edge = 60; // px
+    if (e.clientY < edge) {
+      window.scrollBy(0, -12);
+    } else if (window.innerHeight - e.clientY < edge) {
+      window.scrollBy(0, 12);
+    }
     const position = getDropPosition(e.clientY);
     
     if (position.before) {
@@ -1882,6 +1985,36 @@ function updateTextareaFromPills(stepId) {
   
   // Save to server
   post(base + 'steps/' + stepId + '/update/', {details: textarea.value});
+}
+
+// Render small image number badges next to each bullet to visualize connections
+function renderBulletImageBadges(stepId){
+  const pillsList = document.getElementById(`pills-list-${stepId}`);
+  const imgGrid = document.getElementById(`imgs-${stepId}`);
+  if (!pillsList || !imgGrid) return;
+  const images = Array.from(imgGrid.querySelectorAll('.draggable-img'));
+  const mapping = new Map(); // substep index -> [image order]
+  images.forEach(img => {
+    const sub = img.getAttribute('data-substep-index');
+    if (sub === null || sub === '') return;
+    const orderNum = parseInt(img.getAttribute('data-order') || '0', 10) || 0;
+    const key = String(parseInt(sub, 10));
+    if (!mapping.has(key)) mapping.set(key, []);
+    mapping.get(key).push(orderNum);
+  });
+  Array.from(pillsList.querySelectorAll('.draggable-pill')).forEach(pill => {
+    const idx = pill.getAttribute('data-index');
+    const holder = pill.querySelector('.linked-images');
+    if (!holder) return;
+    holder.innerHTML = '';
+    const nums = (mapping.get(String(idx)) || []).sort((a,b)=>a-b);
+    nums.forEach(n => {
+      const badge = document.createElement('span');
+      badge.className = 'inline-flex items-center justify-center w-5 h-5 rounded-full bg-purple-500 text-white text-[10px] font-bold shadow-sm';
+      badge.textContent = n;
+      holder.appendChild(badge);
+    });
+  });
 }
 
 function addPdfThumb(stepId, data){
@@ -2188,6 +2321,15 @@ document.addEventListener('dragend', (e) => {
 
 document.addEventListener('dragover', (e) => {
   e.preventDefault();
+  // Auto-scroll window while dragging images to reach off-screen pills
+  if (draggedImg) {
+    const edge = 60; // px from top/bottom
+    if (e.clientY < edge) {
+      window.scrollBy(0, -12);
+    } else if (window.innerHeight - e.clientY < edge) {
+      window.scrollBy(0, 12);
+    }
+  }
   const imgContainer = e.target.closest('.draggable-img');
   const pillContainer = e.target.closest('.draggable-pill');
   
@@ -2246,6 +2388,8 @@ document.addEventListener('drop', async (e) => {
           // Update the image's data attribute
           draggedImg.setAttribute('data-substep-index', substepIndex);
           showToast(`Image moved to substep ${substepIndex + 1}`, 'success');
+          // Refresh bullet badges after assignment
+          renderBulletImageBadges(stepId);
         } else {
           const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
           console.error('Server error:', res.status, errorData);

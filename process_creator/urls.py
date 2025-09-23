@@ -27,6 +27,7 @@ urlpatterns = [
     path("<int:pk>/steps/<int:step_id>/images/upload/", views.step_image_upload, name="step_image_upload"),
     path("<int:pk>/steps/<int:step_id>/images/<int:image_id>/delete/", views.step_image_delete, name="step_image_delete"),
     path("<int:pk>/steps/<int:step_id>/images/<int:image_id>/update-substep/", views.step_image_update_substep, name="step_image_update_substep"),
+    path("<int:pk>/steps/<int:step_id>/images/clear-substeps/", views.step_images_clear_substeps, name="step_images_clear_substeps"),
     # Links & Files (PDF)
     path("<int:pk>/steps/<int:step_id>/links/add/", views.step_link_add, name="step_link_add"),
     path("<int:pk>/steps/<int:step_id>/links/<int:link_id>/delete/", views.step_link_delete, name="step_link_delete"),
