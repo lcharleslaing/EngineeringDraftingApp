@@ -65,6 +65,7 @@ class StepImage(models.Model):
     order = models.PositiveIntegerField(default=1)
     substep_index = models.PositiveIntegerField(null=True, blank=True, help_text="0-based index of the bullet (substep) within step.details")
     uploaded_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["order", "id"]
@@ -76,6 +77,7 @@ class StepLink(models.Model):
     title = models.CharField(max_length=255)
     url = models.URLField()
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["order", "id"]
@@ -93,6 +95,7 @@ class StepFile(models.Model):
     order = models.PositiveIntegerField(default=1)
     file = models.FileField(upload_to=step_file_upload_path)
     uploaded_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["order", "id"]

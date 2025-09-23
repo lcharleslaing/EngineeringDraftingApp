@@ -361,6 +361,10 @@
       </select>
       <button id="stats-btn" class="btn btn-info btn-sm" data-process-id="{{ process.id }}">Stats</button>
     </div>
+    <div class="text-xs text-base-content/70 mb-2">
+      <span class="badge badge-outline badge-sm">Created: {{ process.created_at|date:"M d, Y g:i A" }}</span>
+      <span class="badge badge-outline badge-sm ml-2">Updated: {{ process.updated_at|date:"M d, Y g:i A" }}</span>
+    </div>
     <div class="flex flex-col lg:flex-row items-start lg:items-center gap-2 lg:gap-2">
       <div class="flex flex-wrap gap-2">
         <label class="flex items-center gap-2">
@@ -470,6 +474,11 @@
                   <button class="btn btn-sm" data-insert="down" title="Add after">+ After</button>
                   <button class="btn btn-sm btn-error step-delete">Delete</button>
                 </div>
+              </div>
+              <!-- Step Timestamps -->
+              <div class="text-xs text-base-content/60 mb-2">
+                <span class="badge badge-ghost badge-xs">Created: {{ step.created_at|date:"M d, Y g:i A" }}</span>
+                <span class="badge badge-ghost badge-xs ml-1">Updated: {{ step.updated_at|date:"M d, Y g:i A" }}</span>
               </div>
               <!-- Bullet Pills Container -->
               <div class="bullet-pills-container mt-3 mb-2" id="pills-{{ step.id }}">

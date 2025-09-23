@@ -346,7 +346,7 @@ def processes_reorder(request):
     order_list = request.POST.getlist("order[]")
     with transaction.atomic():
         for index, process_id in enumerate(order_list, start=1):
-            Process.objects.filter(id=process_id).update(order=index)
+            Process.objects.filter(id=process_id).update(order=index, updated_at=timezone.now())
     return JsonResponse({"ok": True})
 
 
@@ -369,8 +369,8 @@ def steps_reorder(request, pk: int):
     order_list = request.POST.getlist("order[]")
     with transaction.atomic():
         for index, step_id in enumerate(order_list, start=1):
-            Step.objects.filter(process=process, id=step_id).update(order=index)
-        Process.objects.filter(pk=process.pk).update()  # touch updated_at
+            Step.objects.filter(process=process, id=step_id).update(order=index, updated_at=timezone.now())
+        Process.objects.filter(pk=process.pk).update(updated_at=timezone.now())  # touch updated_at
     return JsonResponse({"ok": True})
 
 
@@ -404,7 +404,7 @@ def step_insert(request, pk: int, step_id: int, direction: str):
     with transaction.atomic():
         insert_order = ref.order if direction == "up" else ref.order + 1
         # shift steps >= insert_order by +1
-        Step.objects.filter(process=process, order__gte=insert_order).update(order=models.F('order') + 1)
+        Step.objects.filter(process=process, order__gte=insert_order).update(order=models.F('order') + 1, updated_at=timezone.now())
         step = Step.objects.create(process=process, order=insert_order, title=title)
     return JsonResponse({"ok": True, "id": step.id, "order": step.order})
 
@@ -436,7 +436,7 @@ def step_delete(request, pk: int, step_id: int):
     step.delete()
     for index, s in enumerate(process.steps.order_by("order", "id"), start=1):
         if s.order != index:
-            Step.objects.filter(pk=s.pk).update(order=index)
+            Step.objects.filter(pk=s.pk).update(order=index, updated_at=timezone.now())
     return JsonResponse({"ok": True})
 
 
@@ -504,7 +504,7 @@ def step_images_clear_substeps(request, pk: int, step_id: int):
     for img in step.images.all():
         if img.substep_index is not None:
             img.substep_index = None
-            img.save(update_fields=["substep_index"])
+            img.save(update_fields=["substep_index", "updated_at"])
             updated += 1
     return JsonResponse({"ok": True, "cleared": updated})
 
@@ -636,7 +636,7 @@ def step_images_reorder(request, pk: int, step_id: int):
     order_list = request.POST.getlist("order[]")
     with transaction.atomic():
         for index, img_id in enumerate(order_list, start=1):
-            StepImage.objects.filter(step=step, id=img_id).update(order=index)
+            StepImage.objects.filter(step=step, id=img_id).update(order=index, updated_at=timezone.now())
     return JsonResponse({"ok": True})
 
 
@@ -889,6 +889,63 @@ def process_word(request, pk: int):
         doc.add_heading('Process Analysis', level=1)
         # Use the new Markdown converter for proper formatting
         add_markdown_to_word_doc(doc, process.analysis, level=2)
+    
+    # Add Process History section with timestamps
+    doc.add_heading('Process History', level=1)
+    
+    # Process timestamps
+    from django.utils import timezone
+    process_created = process.created_at.strftime('%B %d, %Y at %I:%M %p')
+    process_updated = process.updated_at.strftime('%B %d, %Y at %I:%M %p')
+    
+    history_p = doc.add_paragraph()
+    history_p.add_run('Process: ').bold = True
+    history_p.add_run(f'Created {process_created}, Last Updated {process_updated}')
+    
+    # Step timestamps
+    if steps.exists():
+        doc.add_heading('Step History', level=2)
+        for step in steps:
+            step_created = step.created_at.strftime('%B %d, %Y at %I:%M %p')
+            step_updated = step.updated_at.strftime('%B %d, %Y at %I:%M %p')
+            
+            step_p = doc.add_paragraph()
+            step_p.add_run(f'Step {step.order}: {step.title} - ').bold = True
+            step_p.add_run(f'Created {step_created}, Updated {step_updated}')
+            
+            # Substep timestamps (for images and files)
+            if show_attachments:
+                # Image timestamps
+                if step.images.exists():
+                    doc.add_heading(f'Images for Step {step.order}', level=3)
+                    for img in step.images.all():
+                        img_uploaded = img.uploaded_at.strftime('%B %d, %Y at %I:%M %p')
+                        img_updated = img.updated_at.strftime('%B %d, %Y at %I:%M %p')
+                        img_p = doc.add_paragraph()
+                        img_p.add_run(f'Image {img.order}: ').bold = True
+                        img_p.add_run(f'{os.path.basename(img.image.name)} - Uploaded {img_uploaded}, Updated {img_updated}')
+                        if img.substep_index is not None:
+                            img_p.add_run(f' (Associated with substep {img.substep_index + 1})')
+                
+                # File timestamps
+                if step.files.exists():
+                    doc.add_heading(f'Files for Step {step.order}', level=3)
+                    for file in step.files.all():
+                        file_uploaded = file.uploaded_at.strftime('%B %d, %Y at %I:%M %p')
+                        file_updated = file.updated_at.strftime('%B %d, %Y at %I:%M %p')
+                        file_p = doc.add_paragraph()
+                        file_p.add_run(f'File {file.order}: ').bold = True
+                        file_p.add_run(f'{os.path.basename(file.file.name)} - Uploaded {file_uploaded}, Updated {file_updated}')
+                
+                # Link timestamps
+                if step.links.exists():
+                    doc.add_heading(f'Links for Step {step.order}', level=3)
+                    for link in step.links.all():
+                        link_created = link.created_at.strftime('%B %d, %Y at %I:%M %p')
+                        link_updated = link.updated_at.strftime('%B %d, %Y at %I:%M %p')
+                        link_p = doc.add_paragraph()
+                        link_p.add_run(f'Link {link.order}: ').bold = True
+                        link_p.add_run(f'{link.title} - Created {link_created}, Updated {link_updated}')
     
     # Save to BytesIO
     from io import BytesIO
@@ -1625,6 +1682,63 @@ def bulk_word(request):
         if show_analysis and process.analysis:
             doc.add_heading('Process Analysis', level=2)
             add_markdown_to_word_doc(doc, process.analysis, level=3)
+        
+        # Add Process History section with timestamps for this process
+        doc.add_heading('Process History', level=2)
+        
+        # Process timestamps
+        from django.utils import timezone
+        process_created = process.created_at.strftime('%B %d, %Y at %I:%M %p')
+        process_updated = process.updated_at.strftime('%B %d, %Y at %I:%M %p')
+        
+        history_p = doc.add_paragraph()
+        history_p.add_run('Process: ').bold = True
+        history_p.add_run(f'Created {process_created}, Last Updated {process_updated}')
+        
+        # Step timestamps
+        if process.steps.exists():
+            doc.add_heading('Step History', level=3)
+            for step in process.steps.all():
+                step_created = step.created_at.strftime('%B %d, %Y at %I:%M %p')
+                step_updated = step.updated_at.strftime('%B %d, %Y at %I:%M %p')
+                
+                step_p = doc.add_paragraph()
+                step_p.add_run(f'Step {step.order}: {step.title} - ').bold = True
+                step_p.add_run(f'Created {step_created}, Updated {step_updated}')
+                
+                # Substep timestamps (for images and files)
+                if show_attachments:
+                    # Image timestamps
+                    if step.images.exists():
+                        doc.add_heading(f'Images for Step {step.order}', level=4)
+                        for img in step.images.all():
+                            img_uploaded = img.uploaded_at.strftime('%B %d, %Y at %I:%M %p')
+                            img_updated = img.updated_at.strftime('%B %d, %Y at %I:%M %p')
+                            img_p = doc.add_paragraph()
+                            img_p.add_run(f'Image {img.order}: ').bold = True
+                            img_p.add_run(f'{os.path.basename(img.image.name)} - Uploaded {img_uploaded}, Updated {img_updated}')
+                            if img.substep_index is not None:
+                                img_p.add_run(f' (Associated with substep {img.substep_index + 1})')
+                    
+                    # File timestamps
+                    if step.files.exists():
+                        doc.add_heading(f'Files for Step {step.order}', level=4)
+                        for file in step.files.all():
+                            file_uploaded = file.uploaded_at.strftime('%B %d, %Y at %I:%M %p')
+                            file_updated = file.updated_at.strftime('%B %d, %Y at %I:%M %p')
+                            file_p = doc.add_paragraph()
+                            file_p.add_run(f'File {file.order}: ').bold = True
+                            file_p.add_run(f'{os.path.basename(file.file.name)} - Uploaded {file_uploaded}, Updated {file_updated}')
+                    
+                    # Link timestamps
+                    if step.links.exists():
+                        doc.add_heading(f'Links for Step {step.order}', level=4)
+                        for link in step.links.all():
+                            link_created = link.created_at.strftime('%B %d, %Y at %I:%M %p')
+                            link_updated = link.updated_at.strftime('%B %d, %Y at %I:%M %p')
+                            link_p = doc.add_paragraph()
+                            link_p.add_run(f'Link {link.order}: ').bold = True
+                            link_p.add_run(f'{link.title} - Created {link_created}, Updated {link_updated}')
     
     # Add history section if history data is provided
     if history_data:

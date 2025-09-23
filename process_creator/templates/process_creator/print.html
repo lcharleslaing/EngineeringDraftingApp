@@ -146,6 +146,37 @@
       <div class="formatted-text">{{ process.analysis|markdown_to_html|safe }}</div>
     </div>
   {% endif %}
+  
+  <div class="history-section">
+    <h2>Process History</h2>
+    <p><strong>Process:</strong> Created {{ process.created_at|date:"F d, Y \a\t g:i A" }}, Last Updated {{ process.updated_at|date:"F d, Y \a\t g:i A" }}</p>
+    
+    <h3>Step History</h3>
+    {% for step in steps|default:process.steps.all %}
+      <p><strong>Step {{ step.order }}: {{ step.title }} -</strong> Created {{ step.created_at|date:"F d, Y \a\t g:i A" }}, Updated {{ step.updated_at|date:"F d, Y \a\t g:i A" }}</p>
+      
+      {% if step.images.all %}
+        <h4>Images for Step {{ step.order }}</h4>
+        {% for img in step.images.all %}
+          <p><strong>Image {{ img.order }}:</strong> {{ img.image.name|basename }} - Uploaded {{ img.uploaded_at|date:"F d, Y \a\t g:i A" }}, Updated {{ img.updated_at|date:"F d, Y \a\t g:i A" }}{% if img.substep_index is not None %} (Associated with substep {{ img.substep_index|add:1 }}){% endif %}</p>
+        {% endfor %}
+      {% endif %}
+      
+      {% if step.files.all %}
+        <h4>Files for Step {{ step.order }}</h4>
+        {% for file in step.files.all %}
+          <p><strong>File {{ file.order }}:</strong> {{ file.file.name|basename }} - Uploaded {{ file.uploaded_at|date:"F d, Y \a\t g:i A" }}, Updated {{ file.updated_at|date:"F d, Y \a\t g:i A" }}</p>
+        {% endfor %}
+      {% endif %}
+      
+      {% if step.links.all %}
+        <h4>Links for Step {{ step.order }}</h4>
+        {% for link in step.links.all %}
+          <p><strong>Link {{ link.order }}:</strong> {{ link.title }} - Created {{ link.created_at|date:"F d, Y \a\t g:i A" }}, Updated {{ link.updated_at|date:"F d, Y \a\t g:i A" }}</p>
+        {% endfor %}
+      {% endif %}
+    {% endfor %}
+  </div>
 </body>
 </html>
 
