@@ -21,7 +21,6 @@
     <div class="badge badge-primary">{{ progress.completed }}/{{ progress.total }} Completed</div>
     <div class="badge badge-info">{{ overall_percent }}% Overall</div>
     {% if progress.blocked %}<div class="badge badge-error">{{ progress.blocked }} Blocked</div>{% endif %}
-    <!-- Debug: template_newer={{ template_newer }}, job.template.version={{ job.template.version }}, job.template_version_at_create={{ job.template_version_at_create }} -->
     {% if template_newer %}
       <div class="badge badge-warning">Template updated (v{{ job.template.version }})</div>
       <form method="post" action="{% url 'process_creator:job_update_from_template' job.id %}">
@@ -151,11 +150,9 @@ document.querySelectorAll('.js-toggle-images').forEach(btn=>{
       if (!b.dataset.sub && b !== e.currentTarget) b.textContent = 'View Images';
     });
     const filterBySub = (sub !== undefined && sub !== '');
-    console.log('Filtering by substep:', sub, 'type:', typeof sub);
     if (filterBySub) {
       container.querySelectorAll('figure').forEach(fig=>{
         const idx = fig.getAttribute('data-sub');
-        console.log('Figure data-sub:', idx, 'type:', typeof idx, 'matches:', idx === sub);
         // Only show images that have a matching substep_index (not empty/null)
         fig.style.display = (idx === sub && idx !== '') ? '' : 'none';
       });
