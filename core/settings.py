@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     'engineering_review_and_release',
     'release_to_purchasing',
     'process_creator',
+    'released_app',
 ]
 
 MIDDLEWARE = [

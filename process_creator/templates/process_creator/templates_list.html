@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
+<div class="p-4">
+  <div class="flex items-center justify-between mb-4">
+    <h1 class="text-2xl font-bold">Templates</h1>
+    <div class="flex gap-2">
+      <a class="btn" href="{% url 'process_creator:list' %}">Processes</a>
+      <a class="btn" href="{% url 'process_creator:job_list' %}">{{ JOB_LABEL }}s</a>
+      <a class="btn btn-sm" href="?all={% if showing_all %}0{% else %}1{% endif %}">
+        {% if showing_all %}Show Active Only{% else %}Show All{% endif %}
+      </a>
+    </div>
+  </div>
+  <div class="mb-4 flex items-center gap-3">
+    <label class="text-sm">Filter by Module:</label>
+    <select class="select select-bordered select-sm" onchange="location=this.value;">
+      <option value="{% url 'process_creator:template_list' %}{% if showing_all %}?all=1{% endif %}">All Modules</option>
+      {% for m in modules %}
+        {% if selected_module and selected_module.id == m.id %}
+          <option selected value="{% url 'process_creator:template_list' %}?module={{ m.id }}{% if showing_all %}&all=1{% endif %}">{{ m.name }}</option>
+        {% else %}
+          <option value="{% url 'process_creator:template_list' %}?module={{ m.id }}{% if showing_all %}&all=1{% endif %}">{{ m.name }}</option>
+        {% endif %}
+      {% endfor %}
+    </select>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="table table-zebra w-full">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Module</th>
+          <th>Version</th>
+          <th>Status</th>
+          <th>Updated</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in templates %}
+        <tr>
+          <td><a class="link" href="{% url 'process_creator:template_detail' t.id %}">{{ t.name }}</a></td>
+          <td>{{ t.module|default:'—' }}</td>
+          <td>v{{ t.version }}</td>
+          <td>
+            {% if t.is_active %}
+              <span class="badge badge-success">Published</span>
+            {% else %}
+              <span class="badge">Draft</span>
+            {% endif %}
+          </td>
+          <td>{{ t.updated_at }}</td>
+          <td>
+            <a class="btn btn-xs" href="{% url 'process_creator:template_detail' t.id %}">Open</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center">No templates yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+

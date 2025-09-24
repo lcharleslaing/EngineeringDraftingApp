@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+{% load process_filters %}
+{% block content %}
+<div class="p-4 space-y-4">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold">{{ JOB_LABEL }}: {{ job.name }}</h1>
+      <div class="opacity-70 text-sm">From Template: <a class="link" href="{% url 'process_creator:template_detail' job.template.id %}">{{ job.template.name }}</a></div>
+    </div>
+    <div class="space-x-2">
+      {% if job.status == 'not_started' %}
+        <a class="btn btn-sm btn-primary" href="{% url 'process_creator:job_start' job.id %}">Start</a>
+      {% endif %}
+      <a class="btn btn-sm" href="{% url 'process_creator:job_print' job.id %}">Print</a>
+      <a class="btn btn-sm" href="{% url 'process_creator:job_pdf' job.id %}">PDF</a>
+      <a class="btn btn-sm" href="{% url 'process_creator:job_word' job.id %}">Word</a>
+    </div>
+  </div>
+
+  <div class="flex items-center gap-2">
+    <div class="badge badge-primary">{{ progress.completed }}/{{ progress.total }} Completed</div>
+    <div class="badge badge-info">{{ overall_percent }}% Overall</div>
+    {% if progress.blocked %}<div class="badge badge-error">{{ progress.blocked }} Blocked</div>{% endif %}
+    {% if template_newer %}
+      <div class="badge badge-warning">Template updated (v{{ job.template.version }})</div>
+      <form method="post" action="{% url 'process_creator:job_update_from_template' job.id %}">
+        {% csrf_token %}
+        <button class="btn btn-sm btn-warning">Update Process</button>
+      </form>
+    {% endif %}
+    <div class="ml-auto flex gap-2">
+      <a class="btn btn-sm" href="{% url 'process_creator:job_list' %}">All {{ JOB_LABEL }}s</a>
+      <a class="btn btn-sm" href="{% url 'process_creator:template_detail' job.template.id %}">Template</a>
+      <a class="btn btn-sm" href="{% url 'process_creator:list' %}">Processes</a>
+    </div>
+  </div>
+
+  <div class="space-y-4">
+    {% for s in job.steps.all %}
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
+            <div class="flex items-center justify-between">
+            <div>
+              <div class="font-semibold">{{ s.order }}. {{ s.title }} <span class="badge badge-ghost ml-2">{{ step_percents.s.id }}%</span></div>
+              {# Hide step details block because subtasks list below renders bullets #}
+            </div>
+            <div class="flex gap-2">
+              {% if s.status != 'completed' and s.status != 'blocked' %}
+                <a class="btn btn-xs" href="{% url 'process_creator:job_step_start' job.id s.id %}">Start</a>
+                <a class="btn btn-xs btn-success" href="{% url 'process_creator:job_step_complete' job.id s.id %}">Complete</a>
+                <a class="btn btn-xs btn-warning" href="{% url 'process_creator:job_step_block' job.id s.id %}">Block</a>
+              {% elif s.status == 'blocked' %}
+                <a class="btn btn-xs" href="{% url 'process_creator:job_step_unblock' job.id s.id %}">Unblock</a>
+              {% endif %}
+              <div class="badge">{{ s.get_status_display }}</div>
+              {% with src=source_by_order|dict_get:s.order %}
+                {% if src and src.images.count %}
+                  <button class="btn btn-xs js-toggle-images" data-step="{{ s.order }}">View Images</button>
+                {% endif %}
+              {% endwith %}
+            </div>
+          </div>
+
+          {% if s.subtasks.all %}
+            <ul class="mt-3 space-y-1">
+              {% for t in s.subtasks.all %}
+                <li>
+              <label class="label cursor-pointer justify-start gap-2">
+                <input type="checkbox" class="checkbox checkbox-sm js-subtask" data-id="{{ t.id }}" {% if t.completed %}checked{% endif %}>
+                <span>{{ t.text }}</span>
+                {% with src=source_by_order|dict_get:s.order %}
+                  {% if src and src|has_sub_images:forloop.counter0 %}
+                    <button type="button" class="btn btn-ghost btn-xs js-toggle-images" data-step="{{ s.order }}" data-sub="{{ forloop.counter0 }}">Images</button>
+                  {% endif %}
+                {% endwith %}
+              </label>
+                </li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+
+          <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="label"><span class="label-text">Paste Images</span></label>
+              <div class="flex items-center gap-2">
+                <button type="button" class="btn btn-sm js-paste-image" data-step="{{ s.id }}" title="Paste from Clipboard">📋 Paste</button>
+                <input type="file" accept="image/*" class="file-input file-input-sm file-input-bordered js-upload-file" data-step="{{ s.id }}" />
+              </div>
+              <div class="mt-2 flex flex-wrap gap-2 js-thumbs" data-step="{{ s.id }}">
+                {% for im in s.images.all %}
+                  <div class="relative group">
+                    <img src="{{ im.image.url }}" class="w-20 h-20 object-cover rounded cursor-pointer js-thumb border border-base-300" data-full="{{ im.image.url }}" />
+                    <button class="btn btn-xs btn-error absolute -top-2 -right-2 hidden group-hover:block js-del-thumb" data-step="{{ s.id }}" data-img="{{ im.id }}">✕</button>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+            <div>
+              <label class="label"><span class="label-text">Notes</span></label>
+              <textarea class="textarea textarea-bordered w-full js-notes" data-step="{{ s.id }}" rows="3" placeholder="Notes (use '-' for bullet lines)">{{ s.notes }}</textarea>
+            </div>
+          </div>
+
+          {% with src=source_by_order|dict_get:s.order %}
+          {% if src %}
+            <div class="mt-3 hidden js-images" data-step="{{ s.order }}">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {% for img in src.images.all %}
+                  <figure class="border rounded p-2" data-sub="{{ img.substep_index|default:-1 }}">
+                    <img src="{{ img.image.url }}" class="max-w-full" />
+                  </figure>
+                {% endfor %}
+              </div>
+            </div>
+          {% endif %}
+          {% endwith %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+<script>
+document.querySelectorAll('.js-subtask').forEach(cb=>{
+  cb.addEventListener('change', async (e)=>{
+    const id = e.target.dataset.id;
+    const form = new FormData();
+    form.append('completed', e.target.checked ? '1':'0');
+    const res = await fetch('{% url "process_creator:job_subtask_toggle" 0 %}'.replace('0', id), {method:'POST', headers:{'X-CSRFToken': (document.cookie.split('csrftoken=')[1]||'').split(';')[0]}, body: form});
+    if (res.ok) {
+      // Reload to refresh progress badges; could be optimized to update inline
+      window.location.reload();
+    }
+  });
+});
+
+document.querySelectorAll('.js-toggle-images').forEach(btn=>{
+  btn.addEventListener('click', (e)=>{
+    const step = e.currentTarget.dataset.step;
+    const sub = e.currentTarget.dataset.sub;
+    const container = document.querySelector(`.js-images[data-step="${step}"]`);
+    if (!container) return;
+    // Hide all other image panels
+    document.querySelectorAll('.js-images').forEach(panel=>{
+      if (panel !== container) panel.classList.add('hidden');
+    });
+    // Reset other step buttons text
+    document.querySelectorAll('.js-toggle-images').forEach(b=>{
+      if (!b.dataset.sub && b !== e.currentTarget) b.textContent = 'View Images';
+    });
+    const filterBySub = (sub !== undefined && sub !== '');
+    if (filterBySub) {
+      container.querySelectorAll('figure').forEach(fig=>{
+        const idx = fig.getAttribute('data-sub');
+        fig.style.display = (idx === sub) ? '' : 'none';
+      });
+      // Ensure container is visible when filtering by substep
+      container.classList.remove('hidden');
+    } else {
+      // Toggle visibility and clear any filtering (show all)
+      const hidden = container.classList.contains('hidden');
+      container.classList.toggle('hidden');
+      container.querySelectorAll('figure').forEach(fig=>{ fig.style.display=''; });
+      e.currentTarget.textContent = hidden ? 'Hide Images' : 'View Images';
+    }
+  });
+});
+
+// Fullscreen image viewer (full-screen with wheel zoom)
+const imgOverlay = (()=>{
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.92);display:none;z-index:9999;';
+  const scroller = document.createElement('div');
+  scroller.style.cssText = 'position:absolute;inset:0;overflow:auto;cursor:zoom-out;';
+  const img = document.createElement('img');
+  img.id = 'js-full-img';
+  img.style.cssText = 'display:block;margin:auto;transform-origin:center center;max-width:none;max-height:none;width:100%;height:auto;';
+  scroller.appendChild(img);
+  overlay.appendChild(scroller);
+  document.body.appendChild(overlay);
+  let scale = 1;
+  function applyScale(){ img.style.width = (scale*100) + '%'; }
+  function open(src){ img.src = src; scale = 1; applyScale(); overlay.style.display='block'; scroller.scrollTop = 0; scroller.scrollLeft = 0; }
+  function close(){ overlay.style.display='none'; }
+  overlay.addEventListener('click', close);
+  // Alt+wheel to zoom; plain wheel scrolls within scroller
+  overlay.addEventListener('wheel', (e)=>{
+    if (!e.altKey) return; // allow normal scroll
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.1 : -0.1;
+    scale = Math.max(0.2, Math.min(5, scale + delta));
+    applyScale();
+  }, {passive:false});
+  return {open, close};
+})();
+
+// Delegated preview for source step images
+document.querySelectorAll('.js-images').forEach(container=>{
+  container.addEventListener('click', (e)=>{
+    if (e.target.closest('.js-del-thumb')) return;
+    const img = e.target.closest('img');
+    if (img) imgOverlay.open(img.getAttribute('src'));
+  });
+});
+
+// Delegated preview for uploaded thumbnails
+document.querySelectorAll('.js-thumbs').forEach(container=>{
+  container.addEventListener('click', (e)=>{
+    if (e.target.closest('.js-del-thumb')) return;
+    const img = e.target.closest('img');
+    if (img) imgOverlay.open(img.getAttribute('src'));
+  });
+});
+
+// Notes autosave (debounced)
+document.querySelectorAll('.js-notes').forEach(area=>{
+  let t;
+  area.addEventListener('input', ()=>{
+    clearTimeout(t);
+    t = setTimeout(async ()=>{
+      const id = area.dataset.step;
+      const form = new FormData(); form.append('notes', area.value);
+      await fetch('{% url "process_creator:job_step_notes_update" 0 %}'.replace('0', id), {method:'POST', headers:{'X-CSRFToken': (document.cookie.split('csrftoken=')[1]||'').split(';')[0]}, body: form});
+    }, 400);
+  });
+});
+
+// Paste/upload images to step
+async function uploadImageToStep(stepId, file, subIdx){
+  const form = new FormData();
+  form.append('image', file);
+  if (subIdx !== undefined && subIdx !== null) form.append('subtask_index', subIdx);
+  const res = await fetch('{% url "process_creator:job_step_image_upload" 0 %}'.replace('0', stepId), {method:'POST', headers:{'X-CSRFToken': (document.cookie.split('csrftoken=')[1]||'').split(';')[0]}, body: form});
+  const data = await res.json();
+  if (data.ok) {
+    const thumbs = document.querySelector(`.js-thumbs[data-step="${stepId}"]`);
+    if (thumbs) {
+      const wrap = document.createElement('div');
+      wrap.className = 'relative group';
+      wrap.innerHTML = `<img src="${data.url}" class=\"w-20 h-20 object-cover rounded cursor-pointer js-thumb border border-base-300\" data-full=\"${data.url}\" />
+                        <button class=\"btn btn-xs btn-error absolute -top-2 -right-2 hidden group-hover:block js-del-thumb\" data-step=\"${stepId}\" data-img=\"${data.id}\">✕</button>`;
+      thumbs.appendChild(wrap);
+    }
+  }
+}
+
+document.querySelectorAll('.js-upload-file').forEach(inp=>{
+  inp.addEventListener('change', async (e)=>{
+    const file = e.target.files[0]; if (!file) return;
+    const stepId = e.target.dataset.step;
+    await uploadImageToStep(stepId, file, null);
+    e.target.value = '';
+  });
+});
+
+document.querySelectorAll('.js-paste-image').forEach(btn=>{
+  btn.addEventListener('click', async ()=>{
+    try {
+      const items = await navigator.clipboard.read();
+      for (const it of items) {
+        for (const type of it.types) {
+          if (type.startsWith('image/')) {
+            const blob = await it.getType(type);
+            const file = new File([blob], 'pasted.png', {type});
+            await uploadImageToStep(btn.dataset.step, file, null);
+            return;
+          }
+        }
+      }
+      alert('No image found in clipboard. Use the file picker or copy an image first.');
+    } catch (err) {
+      alert('Clipboard image read not supported. Try the file picker.');
+    }
+  });
+});
+
+// Delete thumbnails
+document.querySelectorAll('.js-del-thumb').forEach(btn=>{
+  btn.addEventListener('click', async (e)=>{
+    e.stopPropagation();
+    const stepId = btn.dataset.step;
+    const imgId = btn.dataset.img;
+    if (!confirm('Delete this image?')) return;
+    const res = await fetch('{% url "process_creator:job_step_image_delete" 0 0 %}'.replace('0 0',''+stepId+'/'+imgId), {method:'POST', headers:{'X-CSRFToken': (document.cookie.split('csrftoken=')[1]||'').split(';')[0]}});
+    if (res.ok) {
+      const wrapper = btn.parentElement; wrapper.remove();
+    }
+  });
+});
+</script>
+</div>
+{% endblock %}
+

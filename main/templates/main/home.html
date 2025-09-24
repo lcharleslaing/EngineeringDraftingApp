@@ -24,45 +24,35 @@
                     </div>
                 </div>
                 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-                    <div class="card bg-base-100 shadow-xl">
-                        <div class="card-body">
-                            <h2 class="card-title">
-                                <i class="fas fa-project-diagram text-primary"></i>
-                                Projects
-                            </h2>
-                            <p>Manage your drafting projects and track progress.</p>
-                            <div class="card-actions justify-end">
-                                <button class="btn btn-primary">View Projects</button>
-                            </div>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-8">
+                    <a class="card bg-base-100 shadow-xl hover:shadow-2xl transition" href="{% url 'process_creator:list' %}">
+                        <div class="card-body items-start">
+                            <h2 class="card-title"><i class="fas fa-sitemap text-primary"></i> Process Creator</h2>
+                            <p>Create and maintain processes</p>
+                            <div class="card-actions"><span class="btn btn-primary">Open</span></div>
                         </div>
-                    </div>
-                    
-                    <div class="card bg-base-100 shadow-xl">
-                        <div class="card-body">
-                            <h2 class="card-title">
-                                <i class="fas fa-users text-secondary"></i>
-                                Team
-                            </h2>
-                            <p>Collaborate with your engineering team.</p>
-                            <div class="card-actions justify-end">
-                                <button class="btn btn-secondary">Manage Team</button>
-                            </div>
+                    </a>
+                    <a class="card bg-base-100 shadow-xl hover:shadow-2xl transition" href="{% url 'process_creator:job_list' %}">
+                        <div class="card-body items-start">
+                            <h2 class="card-title"><i class="fas fa-list-check text-secondary"></i> {{ JOB_LABEL|default:'Job' }}s</h2>
+                            <p>Run checklists from templates</p>
+                            <div class="card-actions"><span class="btn btn-secondary">Open</span></div>
                         </div>
-                    </div>
-                    
-                    <div class="card bg-base-100 shadow-xl">
-                        <div class="card-body">
-                            <h2 class="card-title">
-                                <i class="fas fa-chart-line text-accent"></i>
-                                Analytics
-                            </h2>
-                            <p>Track performance and project metrics.</p>
-                            <div class="card-actions justify-end">
-                                <button class="btn btn-accent">View Analytics</button>
-                            </div>
+                    </a>
+                    <a class="card bg-base-100 shadow-xl hover:shadow-2xl transition" href="{% url 'process_creator:template_list' %}">
+                        <div class="card-body items-start">
+                            <h2 class="card-title"><i class="fas fa-clone text-accent"></i> Templates</h2>
+                            <p>Browse and manage templates</p>
+                            <div class="card-actions"><span class="btn btn-accent">Open</span></div>
                         </div>
-                    </div>
+                    </a>
+                    <a class="card bg-base-100 shadow-xl hover:shadow-2xl transition" href="{% url 'process_creator:module_manage' %}">
+                        <div class="card-body items-start">
+                            <h2 class="card-title"><i class="fas fa-boxes-stacked text-neutral"></i> Modules</h2>
+                            <p>Manage module taxonomy</p>
+                            <div class="card-actions"><span class="btn">Open</span></div>
+                        </div>
+                    </a>
                 </div>
             {% else %}
                 <div class="alert alert-info">

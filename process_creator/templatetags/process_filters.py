@@ -63,3 +63,21 @@ def basename(value):
     if not value:
         return ""
     return os.path.basename(value)
+
+
+@register.filter
+def dict_get(dct, key):
+    """Template helper to access dict by variable key."""
+    try:
+        return dct.get(key)
+    except Exception:
+        return None
+
+
+@register.filter
+def has_sub_images(step, sub_index):
+    """Return True if the source Process Step has any images for a given substep_index."""
+    try:
+        return step.images.filter(substep_index=sub_index).exists()
+    except Exception:
+        return False

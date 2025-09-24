@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="p-4">
+  <div class="flex items-center justify-between mb-4">
+    <h1 class="text-2xl font-bold">{{ JOB_LABEL }}s</h1>
+    <div class="flex gap-2">
+      <a class="btn" href="{% url 'process_creator:list' %}">Processes</a>
+      <a class="btn" href="{% url 'process_creator:template_list' %}">Templates</a>
+    </div>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="table table-zebra w-full">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Template</th>
+          <th>Status</th>
+          <th>Assignee</th>
+          <th>Created</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for j in jobs %}
+        <tr>
+          <td>{{ j.name }}</td>
+          <td><a class="link" href="{% url 'process_creator:template_detail' j.template.id %}">{{ j.template.name }}</a></td>
+          <td>{{ j.get_status_display }}</td>
+          <td>{{ j.assigned_to|default:'—' }}</td>
+          <td>{{ j.created_at }}</td>
+          <td><a class="btn btn-xs" href="{% url 'process_creator:job_detail' j.id %}">Open</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center">No {{ JOB_LABEL|lower }}s yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+

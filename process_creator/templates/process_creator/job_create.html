@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="p-4 max-w-2xl">
+  <h1 class="text-2xl font-bold mb-4">Create {{ JOB_LABEL }} from Template</h1>
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      {% if error %}
+        <div class="alert alert-error mb-2">{{ error }}</div>
+      {% endif %}
+      <form method="post">
+        {% csrf_token %}
+        <div class="form-control mb-3">
+          <label class="label"><span class="label-text">{{ JOB_LABEL }} Name</span></label>
+          <input name="name" class="input input-bordered" placeholder="Enter a name" />
+        </div>
+        <div class="form-control mb-3">
+          <label class="label"><span class="label-text">Assign To (optional)</span></label>
+          <select name="assigned_to" class="select select-bordered">
+            <option value="">—</option>
+            {% for u in users %}
+              <option value="{{ u.id }}">{{ u.get_full_name|default:u.username }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="flex gap-2">
+          <button class="btn btn-primary" type="submit">Create</button>
+          <a href="{% url 'process_creator:template_detail' template.id %}" class="btn">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="mt-6">
+    <h2 class="text-lg font-semibold mb-2">Template Preview</h2>
+    <ol class="list-decimal ml-6">
+      {% for s in template.steps.all %}
+        <li>{{ s.title }}</li>
+      {% empty %}
+        <li>No steps.</li>
+      {% endfor %}
+    </ol>
+  </div>
+  
+</div>
+{% endblock %}
+

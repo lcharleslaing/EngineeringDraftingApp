@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
+<div class="p-4 space-y-4">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold">{{ template.name }}</h1>
+      <div class="text-sm opacity-70">Module: {{ template.module|default:'—' }} • Version v{{ template.version }}</div>
+      <div class="mt-2">{{ template.description|linebreaksbr }}</div>
+    </div>
+    <div class="space-x-2">
+      <a class="btn" href="{% url 'process_creator:template_list' %}">All Templates</a>
+      <a class="btn" href="{% url 'process_creator:list' %}">Processes</a>
+      <a class="btn" href="{% url 'process_creator:job_list' %}">{{ JOB_LABEL }}s</a>
+      {% if template.is_active %}
+        <div class="badge badge-success">Published</div>
+      {% else %}
+        <div class="badge">Draft</div>
+      {% endif %}
+      <form method="post" action="{% url 'process_creator:template_publish' template.id %}" class="inline js-publish-form">
+        {% csrf_token %}
+        {% if template.is_active %}
+          <input type="hidden" name="is_active" value="0" />
+          <button type="submit" class="btn btn-sm js-publish-btn">Unpublish</button>
+        {% else %}
+          <input type="hidden" name="is_active" value="1" />
+          <button type="submit" class="btn btn-sm btn-primary js-publish-btn">Publish</button>
+        {% endif %}
+      </form>
+      <a href="{% url 'process_creator:job_create' template.id %}" class="btn btn-sm btn-secondary">Create {{ JOB_LABEL }}</a>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <h2 class="card-title">Steps</h2>
+      <ol class="list-decimal ml-6 space-y-3">
+        {% for s in template.steps.all %}
+          <li>
+            <div class="font-medium">{{ s.title }}</div>
+            {% if s.details %}
+              <div class="prose max-w-none whitespace-pre-wrap">{{ s.details }}</div>
+            {% endif %}
+            {% with src=source_by_order.s.order %}{% endwith %}
+            {% if source_by_order.s.order %}{% endif %}
+          </li>
+        {% empty %}
+          <li>No steps.</li>
+        {% endfor %}
+      </ol>
+    </div>
+  </div>
+<script>
+// Intercept publish/unpublish form to avoid navigation
+document.querySelectorAll('.js-publish-form').forEach(form=>{
+  form.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const url = form.getAttribute('action');
+    const fd = new FormData(form);
+    const res = await fetch(url, {method:'POST', body: fd, headers:{'X-CSRFToken': (document.cookie.split('csrftoken=')[1]||'').split(';')[0]}});
+    try {
+      const data = await res.json();
+      const badge = document.querySelector('.badge-success, .badge');
+      const btn = form.querySelector('.js-publish-btn');
+      if (data && data.ok) {
+        if (data.is_active) {
+          // Now published
+          if (badge) { badge.className = 'badge badge-success'; badge.textContent = 'Published'; }
+          btn.classList.remove('btn-primary'); btn.textContent = 'Unpublish';
+          form.querySelector('input[name="is_active"]').value = '0';
+        } else {
+          // Now draft
+          if (badge) { badge.className = 'badge'; badge.textContent = 'Draft'; }
+          btn.classList.add('btn-primary'); btn.textContent = 'Publish';
+          form.querySelector('input[name="is_active"]').value = '1';
+        }
+      }
+    } catch(_) {
+      // ignore JSON parsing errors
+    }
+  });
+});
+</script>
+</div>
+{% endblock %}
+

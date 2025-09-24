@@ -524,7 +524,7 @@
                 <div class="grid grid-cols-2 md:grid-cols-3 gap-2" id="imgs-{{ step.id }}" data-step-id="{{ step.id }}">
                   {% for img in step.images.all %}
                     <div class="relative group draggable-img" data-img-id="{{ img.id }}" data-order="{{ img.order }}" data-substep-index="{{ img.substep_index|default_if_none:'' }}" draggable="true">
-                      <img src="{{ img.image.url }}" class="rounded border object-cover w-full h-28" />
+                      <img src="{{ img.image.url }}" class="rounded border object-cover w-full h-28 cursor-pointer js-step-thumb" />
                       <button class="btn btn-xs btn-error absolute top-1 right-1 opacity-0 group-hover:opacity-100 delete-img" data-step="{{ step.id }}" data-id="{{ img.id }}">✕</button>
                       <!-- Image Number Circle -->
                       <div class="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-secondary text-secondary-content flex items-center justify-center text-xs font-bold shadow-lg z-20 border border-base-100">
@@ -704,6 +704,8 @@ document.getElementById('add-step').addEventListener('click', async ()=>{
   
   // Set a flag to scroll to new step after reload
   sessionStorage.setItem('scrollToNewStep', 'true');
+  // Ensure text areas will show after reload
+  sessionStorage.setItem('forceShowText', 'true');
   
   location.reload();
 });
@@ -757,6 +759,15 @@ document.querySelectorAll('#steps .card').forEach(card=>{
       toggleText.textContent = 'Edit Text';
     }
   });
+
+  // If coming from an insert or add action, force show text once
+  try {
+    if (sessionStorage.getItem('forceShowText') === 'true') {
+      textarea.style.display = 'block';
+      toggleText.textContent = 'Hide Text';
+      resizeTextarea();
+    }
+  } catch(e) {}
   
   // Track likely insertion bullet index based on caret position while editing
   if (!window.bulletInsertHint) window.bulletInsertHint = {};
@@ -2251,6 +2262,8 @@ document.getElementById('steps').addEventListener('click', async (e)=>{
     const res = await fetch(base + 'steps/' + id + '/insert/' + dir + '/', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}});
     const data = await res.json();
     if (data && data.ok) {
+      // Flag to show text on reload
+      try { sessionStorage.setItem('forceShowText', 'true'); } catch(e) {}
       location.reload();
     } else {
       btn.disabled = false;
@@ -2271,6 +2284,8 @@ document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('.auto-resize').forEach(textarea => {
     autoResize(textarea);
   });
+  // Clear the one-time flag after first use
+  try { if (sessionStorage.getItem('forceShowText') === 'true') sessionStorage.removeItem('forceShowText'); } catch(e) {}
 });
 
 // Initialize auto-resize for all textareas
@@ -2304,6 +2319,11 @@ document.addEventListener('DOMContentLoaded', function() {
     childList: true,
     subtree: true
   });
+});
+
+// Full-screen preview for step thumbnails (same overlay as jobs)
+document.querySelectorAll('.js-step-thumb').forEach(img=>{
+  img.addEventListener('click', ()=> imgOverlay.open(img.src));
 });
 
 // Image drag and drop reordering

@@ -4,6 +4,8 @@
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-2xl font-bold">Process Creator</h1>
   <div class="flex gap-2">
+    <a href="{% url 'process_creator:template_list' %}" class="btn">Templates</a>
+    <a href="{% url 'process_creator:job_list' %}" class="btn">{{ JOB_LABEL|default:'Job' }}s</a>
     <button id="summary-all" class="btn btn-secondary">Summary All</button>
     <button id="analyze-all" class="btn btn-accent">Analysis All</button>
     <button id="print-all" class="btn">Print All</button>
@@ -27,11 +29,8 @@
       {% endfor %}
       <option value="__new__">+ New Module…</option>
     </select>
-    {% if selected_module %}
-      <div class="text-sm text-base-content/70">
-        Showing processes in: <strong>{{ selected_module.name }}</strong>
-      </div>
-    {% endif %}
+    
+    <label class="label cursor-pointer gap-2"><input id="toggle-select-all" type="checkbox" class="checkbox checkbox-sm" /><span class="label-text">Check All</span></label>
     <!-- Module-level export toggles -->
     <div class="flex items-center gap-3">
       <label class="label cursor-pointer gap-2"><span class="label-text">Summary</span><input id="toggle-summary-all" type="checkbox" class="toggle toggle-sm" /></label>
@@ -40,6 +39,15 @@
       <label class="label cursor-pointer gap-2"><span class="label-text">Description</span><input id="toggle-description-all" type="checkbox" class="toggle toggle-sm" /></label>
       <label class="label cursor-pointer gap-2"><span class="label-text">Notes</span><input id="toggle-notes-all" type="checkbox" class="toggle toggle-sm" /></label>
       <label class="label cursor-pointer gap-2"><span class="label-text">Show PDFs</span><input id="toggle-pdfs-all" type="checkbox" class="toggle toggle-sm" /></label>
+    </div>
+    <div class="flex items-center gap-2 ml-auto">
+      <button id="create-template-selected" class="btn btn-outline">Create Template From Selected</button>
+      <select id="new-template-module" class="select select-bordered select-sm">
+        <option value="">Select Module</option>
+        {% for module in modules %}
+          <option value="{{ module.id }}">{{ module.name }}</option>
+        {% endfor %}
+      </select>
     </div>
   </div>
 
@@ -67,7 +75,7 @@
             <a class="btn btn-sm" href="{% url 'process_creator:edit' p.id %}">Edit</a>
             <a class="btn btn-sm" href="{% url 'process_creator:print' p.id %}" target="_blank">Print</a>
             <button class="btn btn-sm" onclick="copyProcess({{ p.id }})">Copy</button>
-            <a class="btn btn-sm btn-error" href="{% url 'process_creator:delete' p.id %}">Delete</a>
+            <a class="btn btn-sm btn-error js-delete" href="{% url 'process_creator:delete' p.id %}" data-id="{{ p.id }}">Delete</a>
           </div>
         </div>
       </div>
@@ -131,6 +139,29 @@ document.getElementById('print-all').addEventListener('click', ()=>{
     .map(c=>c.dataset.id);
   const params = new URLSearchParams(); ids.forEach(id=>params.append('ids', id));
   window.open('{% url "process_creator:print_all" %}?'+params.toString(), '_blank');
+});
+
+// Delete (AJAX) with immediate UI removal
+document.getElementById('process-list').addEventListener('click', async (e)=>{
+  const a = e.target.closest('a.js-delete');
+  if (!a) return;
+  e.preventDefault();
+  const card = a.closest('.card');
+  const id = a.dataset.id;
+  if (!id) return;
+  if (!confirm('Delete this process?')) return;
+  try {
+    const res = await fetch(a.href, { method: 'POST', headers: { 'X-CSRFToken': getCookie('csrftoken') } });
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    // Remove from DOM regardless of response body; server tolerates missing rows
+    card.remove();
+  } catch (err) {
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-top toast-end';
+    toast.innerHTML = '<div class="alert alert-error"><span>Failed to delete: '+(err.message||'')+'</span></div>';
+    document.body.appendChild(toast);
+    setTimeout(()=>toast.remove(), 4000);
+  }
 });
 
 // Bulk AI operations
@@ -262,6 +293,22 @@ document.getElementById('module-filter').addEventListener('change', (e) => {
   window.location.href = url.toString();
 });
 
+// Check All / Uncheck All toggle
+const masterToggle = document.getElementById('toggle-select-all');
+if (masterToggle) {
+  masterToggle.addEventListener('change', (e)=>{
+    const checked = e.target.checked;
+    document.querySelectorAll('#process-list .select-item').forEach(cb=>{ cb.checked = checked; });
+    saveCheckboxStates();
+    e.target.nextElementSibling.textContent = checked ? 'Uncheck All' : 'Check All';
+  });
+  // Initialize label based on current state
+  const allCbs = Array.from(document.querySelectorAll('#process-list .select-item'));
+  const allChecked = allCbs.length && allCbs.every(cb=>cb.checked);
+  masterToggle.checked = allChecked;
+  masterToggle.nextElementSibling.textContent = allChecked ? 'Uncheck All' : 'Check All';
+}
+
 // Minimal create-module modal (DaisyUI)
 function openCreateModuleModal({afterCreate}={}){
   let modal = document.getElementById('create-module-modal');
@@ -374,6 +421,30 @@ document.getElementById('export-word-all').addEventListener('click', ()=>{
     params.append('history_data', JSON.stringify(selectedHistory));
   }
   window.open('{% url "process_creator:bulk_word" %}?'+params.toString(), '_blank');
+});
+
+// Create Template From Selected
+document.getElementById('create-template-selected').addEventListener('click', async ()=>{
+  const ids = Array.from(document.querySelectorAll('#process-list .card'))
+    .filter(c=>c.querySelector('.select-item').checked)
+    .map(c=>c.dataset.id);
+  if (ids.length === 0) { showToast('Select at least one process', 'error'); return; }
+  const name = prompt('New Template Name');
+  if (!name) return;
+  const moduleId = document.getElementById('new-template-module').value;
+  if (!moduleId) { showToast('Select a Module for the new template', 'error'); return; }
+  const form = new URLSearchParams();
+  ids.forEach(id=> form.append('process_ids[]', id));
+  form.append('name', name);
+  form.append('module', moduleId);
+  const res = await fetch('{% url "process_creator:template_create_from_selected" %}', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}, body: form});
+  const data = await res.json();
+  if (data.ok) {
+    showToast('Template created', 'success');
+    window.location.href = '{% url "process_creator:template_detail" 0 %}'.replace('0', data.template_id);
+  } else {
+    showToast(data.error || 'Failed to create template', 'error');
+  }
 });
 
 // History management

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Module, Process, Step, StepImage, StepLink, StepFile, AIInteraction
+from .models import Module, Process, Step, StepImage, StepLink, StepFile, AIInteraction, ProcessTemplate, TemplateStep, Job, JobStep, JobSubtask, JobStepImage
 
 
 @admin.register(Module)
@@ -58,4 +58,51 @@ class InteractionAdmin(admin.ModelAdmin):
     readonly_fields = ['created_at', 'tokens_used', 'cost']
     ordering = ['-created_at']
 
-# Register your models here.
+# New admin registrations
+
+class TemplateStepInline(admin.TabularInline):
+    model = TemplateStep
+    extra = 0
+    fields = ("order", "title", "details")
+    ordering = ("order",)
+
+@admin.register(ProcessTemplate)
+class ProcessTemplateAdmin(admin.ModelAdmin):
+    list_display = ("name", "module", "version", "source_process", "updated_at", "is_active")
+    list_filter = ("module", "is_active")
+    search_fields = ("name", "module__name", "source_process__name")
+    inlines = [TemplateStepInline]
+    ordering = ("-updated_at",)
+
+class JobStepInline(admin.TabularInline):
+    model = JobStep
+    extra = 0
+    fields = ("order", "title", "status", "assigned_to", "started_at", "completed_at")
+    ordering = ("order",)
+    readonly_fields = ("started_at", "completed_at")
+
+@admin.register(Job)
+class JobAdmin(admin.ModelAdmin):
+    list_display = ("name", "template", "status", "assigned_to", "created_at", "started_at", "completed_at")
+    list_filter = ("status", "template__module")
+    search_fields = ("name", "template__name", "template__source_process__name")
+    inlines = [JobStepInline]
+    ordering = ("-created_at",)
+
+@admin.register(JobStep)
+class JobStepAdmin(admin.ModelAdmin):
+    list_display = ("job", "order", "title", "status", "assigned_to", "started_at", "completed_at")
+    list_filter = ("status", "job")
+    ordering = ("job", "order")
+
+@admin.register(JobSubtask)
+class JobSubtaskAdmin(admin.ModelAdmin):
+    list_display = ("job_step", "order", "text", "completed")
+    list_filter = ("completed",)
+    ordering = ("job_step", "order")
+
+@admin.register(JobStepImage)
+class JobStepImageAdmin(admin.ModelAdmin):
+    list_display = ("job_step", "subtask_index", "order", "uploaded_at")
+    list_filter = ("job_step",)
+    ordering = ("job_step", "order")

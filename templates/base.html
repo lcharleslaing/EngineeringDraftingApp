@@ -51,21 +51,13 @@
                                     <li><a href="{% url 'home' %}" class="{% if request.resolver_match.url_name == 'home' %}active{% endif %}">Dashboard</a></li>
                                 {% endif %}
                                 {% if 'theme' in user_accessible_apps and allow_user_themes %}
-                                    <li><a href="{% url 'theme:selector' %}" class="{% if request.resolver_match.url_name == 'selector' %}active{% endif %}">
-                                        <i class="fas fa-palette mr-1"></i>Theme
-                                    </a></li>
+                                    <li><a href="{% url 'theme:selector' %}" class="{% if request.resolver_match.url_name == 'selector' %}active{% endif %}"><i class="fas fa-palette mr-1"></i>Theme</a></li>
                                 {% endif %}
-                                {% if 'project' in user_accessible_apps %}
-                                    <li><a href="#" class="{% if 'project' in request.resolver_match.namespace %}active{% endif %}">
-                                        <i class="fas fa-project-diagram mr-1"></i>Projects
-                                    </a></li>
-                                {% endif %}
-                                {% if 'account' in user_accessible_apps %}
-                                    <li><a href="#" class="{% if 'account' in request.resolver_match.namespace %}active{% endif %}">
-                                        <i class="fas fa-users mr-1"></i>Accounts
-                                    </a></li>
-                                {% endif %}
-                                <!-- Add more navigation items here -->
+                                <!-- Process Creator shortcuts -->
+                                <li><a href="{% url 'process_creator:list' %}" class="{% if 'process_creator' in request.resolver_match.namespace and request.resolver_match.url_name == 'list' %}active{% endif %}">Process Creator</a></li>
+                                <li><a href="{% url 'process_creator:job_list' %}" class="{% if request.resolver_match.url_name == 'job_list' %}active{% endif %}">Jobs</a></li>
+                                <li><a href="{% url 'process_creator:template_list' %}" class="{% if request.resolver_match.url_name == 'template_list' %}active{% endif %}">Templates</a></li>
+                                <li><a href="{% url 'process_creator:module_manage' %}" class="{% if request.resolver_match.url_name == 'module_manage' %}active{% endif %}">Modules</a></li>
                             </ul>
                         </div>
                         

@@ -8,7 +8,9 @@ from django.db import models
 from django.template.loader import render_to_string
 from django.conf import settings
 from django.utils import timezone
-from .models import Module, Process, Step, StepImage, StepLink, StepFile, AIInteraction
+from .models import Module, Process, Step, StepImage, StepLink, StepFile, AIInteraction, ProcessTemplate, TemplateStep, Job, JobStep, JobSubtask, JobStepImage
+from .conf import JOB_LABEL
+from .services.templates import sync_process_to_template
 from xhtml2pdf import pisa
 from docx import Document
 from docx.shared import Inches, Pt
@@ -169,11 +171,11 @@ def process_list(request):
     if selected_module_id:
         try:
             selected_module = Module.objects.get(id=selected_module_id)
-            processes = Process.objects.filter(module=selected_module).order_by('order', 'name')
+            processes = Process.objects.filter(module=selected_module).order_by('-updated_at', '-created_at')
         except Module.DoesNotExist:
-            processes = Process.objects.all().order_by('order', 'name')
+            processes = Process.objects.all().order_by('-updated_at', '-created_at')
     else:
-        processes = Process.objects.all().order_by('order', 'name')
+        processes = Process.objects.all().order_by('-updated_at', '-created_at')
     
     return render(request, "process_creator/list.html", {
         "processes": processes,
@@ -299,16 +301,29 @@ def process_update(request, pk: int):
 
 @login_required
 @require_app_access('process_creator', action='delete')
+@require_POST
 def process_delete(request, pk: int):
-    process = get_object_or_404(Process, pk=pk)
+    # Delete a process; support AJAX (JSON) and non-AJAX (redirect) callers
+    try:
+        process = Process.objects.get(pk=pk)
+    except Process.DoesNotExist:
+        # For AJAX callers, return ok so UI can remove the stale item
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('Accept',''):
+            return JsonResponse({"ok": True, "removed": True})
+        return redirect("process_creator:list")
     process.delete()
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('Accept',''):
+        return JsonResponse({"ok": True})
     return redirect("process_creator:list")
 
 
 @login_required
 @require_app_access('process_creator', action='view')
 def process_print(request, pk: int):
-    process = get_object_or_404(Process, pk=pk)
+    try:
+        process = Process.objects.get(pk=pk)
+    except Process.DoesNotExist:
+        return redirect("process_creator:list")
     focused_step_id = request.GET.get('focused_step')
     try:
         steps = process.steps.all() if not focused_step_id else process.steps.filter(id=int(focused_step_id))
@@ -1789,3 +1804,548 @@ def bulk_word(request):
     return response
 
 # Create your views here.
+
+# --- Minimal stubs for Templates & Jobs (will be enhanced) ---
+@login_required
+@require_app_access('process_creator', action='view')
+def template_list(request):
+    qs = ProcessTemplate.objects.select_related('module', 'source_process').order_by('-updated_at')
+    modules = Module.objects.all()
+    selected_module = None
+    module_id = request.GET.get('module')
+    if module_id:
+        try:
+            selected_module = Module.objects.get(id=module_id)
+            qs = qs.filter(module=selected_module)
+        except Module.DoesNotExist:
+            pass
+    if request.GET.get('all') != '1':
+        qs = qs.filter(is_active=True)
+    return render(request, 'process_creator/templates_list.html', {
+        'templates': qs,
+        'showing_all': request.GET.get('all') == '1',
+        'JOB_LABEL': JOB_LABEL,
+        'modules': modules,
+        'selected_module': selected_module,
+    })
+
+
+@login_required
+@require_app_access('process_creator', action='view')
+def template_detail(request, tpl_id: int):
+    template = get_object_or_404(
+        ProcessTemplate.objects.select_related('module', 'source_process').prefetch_related('steps'), id=tpl_id
+    )
+    source_steps = list(template.source_process.steps.all()) if template.source_process_id else []
+    source_by_order = {s.order: s for s in source_steps}
+    return render(request, 'process_creator/template_detail.html', {
+        'template': template,
+        'source_by_order': source_by_order,
+        'JOB_LABEL': JOB_LABEL,
+    })
+
+
+@login_required
+@require_app_access('process_creator', action='view')
+def job_list(request):
+    jobs = Job.objects.select_related('template', 'template__module').order_by('-created_at')
+    return render(request, 'process_creator/job_list.html', {'jobs': jobs, 'JOB_LABEL': JOB_LABEL})
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+def job_create(request, tpl_id: int):
+    template = get_object_or_404(ProcessTemplate.objects.prefetch_related('steps'), id=tpl_id, is_active=True)
+    if request.method == 'POST':
+        name = (request.POST.get('name') or '').strip()
+        assigned_to_id = request.POST.get('assigned_to')
+        if not name:
+            return render(request, 'process_creator/job_create.html', {'template': template, 'error': 'Name is required', 'JOB_LABEL': JOB_LABEL})
+        assignee = None
+        if assigned_to_id:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            assignee = User.objects.filter(id=assigned_to_id).first()
+        with transaction.atomic():
+            job = Job.objects.create(template=template, name=name, assigned_to=assignee, template_version_at_create=template.version)
+            steps = list(template.steps.all().order_by('order', 'id'))
+            JobStep.objects.bulk_create([JobStep(job=job, order=s.order, title=s.title, details=s.details or '') for s in steps])
+            # Create bullet-level subtasks
+            from .models import JobSubtask
+            job_steps = {js.order: js for js in job.steps.all()}
+            for s in steps:
+                js = job_steps.get(s.order)
+                if not js:
+                    continue
+                if s.details:
+                    idx = 0
+                    for line in s.details.split('\n'):
+                        if line.strip().startswith('- '):
+                            JobSubtask.objects.create(job_step=js, order=idx, text=line.strip()[2:].strip())
+                            idx += 1
+        return redirect('process_creator:job_detail', job_id=job.id)
+    else:
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        users = User.objects.all().order_by('username')
+        return render(request, 'process_creator/job_create.html', {'template': template, 'users': users, 'JOB_LABEL': JOB_LABEL})
+
+
+@login_required
+@require_app_access('process_creator', action='view')
+def job_detail(request, job_id: int):
+    job = get_object_or_404(Job.objects.select_related('template', 'template__module').prefetch_related('steps', 'steps__subtasks', 'steps__images'), id=job_id)
+    source_steps = list(job.template.source_process.steps.all()) if job.template and job.template.source_process_id else []
+    source_by_order = {s.order: s for s in source_steps}
+    completed = sum(1 for s in job.steps.all() if s.status == 'completed')
+    total = job.steps.count()
+    blocked = sum(1 for s in job.steps.all() if s.status == 'blocked')
+    total_subtasks = 0
+    done_subtasks = 0
+    step_percents = {}
+    for s in job.steps.all():
+        st_total = s.subtasks.count()
+        if st_total:
+            st_done = s.subtasks.filter(completed=True).count()
+            step_percents[s.id] = int(round((st_done / st_total) * 100))
+            total_subtasks += st_total
+            done_subtasks += st_done
+        else:
+            step_percents[s.id] = 100 if s.status == 'completed' else 0
+    overall_percent = int(round((done_subtasks / total_subtasks) * 100)) if total_subtasks else int(round((completed / total) * 100)) if total else 0
+    template_newer = job.template.version > job.template_version_at_create
+    return render(request, 'process_creator/job_detail.html', {
+        'job': job,
+        'source_by_order': source_by_order,
+        'progress': {'completed': completed, 'total': total, 'blocked': blocked},
+        'JOB_LABEL': JOB_LABEL,
+        'template_newer': template_newer,
+        'overall_percent': overall_percent,
+        'step_percents': step_percents,
+    })
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+def job_start(request, job_id: int):
+    job = get_object_or_404(Job, id=job_id)
+    if job.status == 'not_started':
+        job.status = 'in_progress'
+        job.started_at = timezone.now()
+        job.save(update_fields=['status', 'started_at', 'updated_at'])
+    return redirect('process_creator:job_detail', job_id=job.id)
+
+
+def _update_job_step(job: Job, step: JobStep, status: str):
+    now = timezone.now()
+    step.status = status
+    if status == 'in_progress' and not step.started_at:
+        step.started_at = now
+    if status == 'completed':
+        step.completed_at = now
+    step.save(update_fields=['status', 'started_at', 'completed_at', 'updated_at'])
+    if status == 'completed':
+        if all(s.status == 'completed' for s in job.steps.all()):
+            job.status = 'completed'
+            job.completed_at = now
+            job.save(update_fields=['status', 'completed_at', 'updated_at'])
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+def job_step_start(request, job_id: int, job_step_id: int):
+    job = get_object_or_404(Job, id=job_id)
+    step = get_object_or_404(JobStep, id=job_step_id, job=job)
+    _update_job_step(job, step, 'in_progress')
+    return redirect('process_creator:job_detail', job_id=job.id)
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+def job_step_complete(request, job_id: int, job_step_id: int):
+    job = get_object_or_404(Job, id=job_id)
+    step = get_object_or_404(JobStep, id=job_step_id, job=job)
+    _update_job_step(job, step, 'completed')
+    return redirect('process_creator:job_detail', job_id=job.id)
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+def job_step_block(request, job_id: int, job_step_id: int):
+    job = get_object_or_404(Job, id=job_id)
+    step = get_object_or_404(JobStep, id=job_step_id, job=job)
+    _update_job_step(job, step, 'blocked')
+    return redirect('process_creator:job_detail', job_id=job.id)
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+def job_step_unblock(request, job_id: int, job_step_id: int):
+    job = get_object_or_404(Job, id=job_id)
+    step = get_object_or_404(JobStep, id=job_step_id, job=job)
+    new_status = 'in_progress' if step.started_at else 'pending'
+    _update_job_step(job, step, new_status)
+    return redirect('process_creator:job_detail', job_id=job.id)
+
+
+@login_required
+@require_app_access('process_creator', action='view')
+def job_print(request, job_id: int):
+    job = get_object_or_404(Job.objects.select_related('template', 'template__source_process'), id=job_id)
+    steps = job.steps.all().order_by('order', 'id')
+    return render(request, 'process_creator/job_print.html', {'job': job, 'steps': steps, 'JOB_LABEL': JOB_LABEL})
+
+
+@login_required
+@require_app_access('process_creator', action='view')
+def job_pdf(request, job_id: int):
+    job = get_object_or_404(Job.objects.select_related('template', 'template__source_process'), id=job_id)
+    steps = job.steps.all().order_by('order', 'id')
+    html_string = render_to_string('process_creator/job_print.html', {'job': job, 'steps': steps, 'JOB_LABEL': JOB_LABEL})
+    def link_callback(uri, rel):
+        if uri.startswith('/media/'):
+            path = os.path.join(settings.MEDIA_ROOT, uri.replace('/media/', ''))
+            return path
+        if uri.startswith('/static/'):
+            static_root = getattr(settings, 'STATIC_ROOT', None)
+            if static_root:
+                return os.path.join(static_root, uri.replace('/static/', ''))
+        return uri
+    pdf_io = BytesIO()
+    pisa.CreatePDF(src=html_string, dest=pdf_io, link_callback=link_callback, encoding='utf-8')
+    pdf_io.seek(0)
+    from datetime import datetime
+    timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+    safe_title = ''.join(c for c in job.name if c.isalnum() or c in (' ', '-', '_')).rstrip().replace(' ', '-')
+    filename = f"{JOB_LABEL}-{safe_title}-{timestamp}.pdf"
+    response = HttpResponse(pdf_io.getvalue(), content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{quote(filename)}"'
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response['Pragma'] = 'no-cache'
+    response['Expires'] = '0'
+    return response
+
+
+@login_required
+@require_app_access('process_creator', action='view')
+def job_word(request, job_id: int):
+    job = get_object_or_404(Job.objects.select_related('template', 'template__source_process'), id=job_id)
+    steps = job.steps.all().order_by('order', 'id')
+    show_attachments = request.GET.get('show_attachments', 'false').lower() == 'true'
+    doc = Document()
+    try:
+        if len(doc.paragraphs) and not doc.paragraphs[0].text.strip():
+            p = doc.paragraphs[0]
+            p._element.getparent().remove(p._element)
+    except Exception:
+        pass
+    try:
+        from docx.enum.section import WD_SECTION_START
+        for section in doc.sections:
+            section.start_type = WD_SECTION_START.NEW_PAGE
+            section.different_first_page_header_footer = False
+    except Exception:
+        pass
+    title = doc.add_paragraph(f"{JOB_LABEL}: {job.name}", style='Heading 1')
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    try:
+        title.paragraph_format.page_break_before = False
+    except Exception:
+        pass
+    # Overall percent based on subtasks
+    total_subtasks = 0
+    done_subtasks = 0
+    for s in steps:
+        total_subtasks += s.subtasks.count()
+        done_subtasks += s.subtasks.filter(completed=True).count()
+    overall_percent = int(round((done_subtasks / total_subtasks) * 100)) if total_subtasks else int(round((sum(1 for s in steps if s.status=='completed') / (steps.count() or 1)) * 100))
+
+    # Status summary
+    doc.add_paragraph(f"Status: {job.get_status_display()} — Completion: {overall_percent}%")
+
+    if steps.exists():
+        doc.add_heading('Steps', level=1)
+        source_steps = list(job.template.source_process.steps.all()) if job.template and job.template.source_process_id else []
+        source_by_order = {s.order: s for s in source_steps}
+        for step in steps:
+            st_total = step.subtasks.count()
+            st_done = step.subtasks.filter(completed=True).count()
+            st_pct = int(round((st_done / st_total) * 100)) if st_total else (100 if step.status == 'completed' else 0)
+            doc.add_heading(f'{step.order}. {step.title} — {st_pct}%', level=2)
+            if step.details:
+                lines = step.details.split('\n')
+                bullet_idx = -1
+                for raw in lines:
+                    line = raw.rstrip('\r')
+                    is_bullet = bool(re.match(r'^\s*-\s+', line))
+                    if is_bullet:
+                        bullet_idx += 1
+                    bullet_text_match = re.match(r'^\s*-\s+(.*)$', line)
+                    bullet_text = bullet_text_match.group(1) if bullet_text_match else line
+                    if is_bullet and show_attachments:
+                        src = source_by_order.get(step.order)
+                        if src and src.images.exists():
+                            related = [img for img in src.images.all() if img.substep_index == bullet_idx]
+                            if related:
+                                for img in related:
+                                    try:
+                                        img_path = os.path.join(settings.MEDIA_ROOT, str(img.image))
+                                        if os.path.exists(img_path):
+                                            table = doc.add_table(rows=1, cols=1)
+                                            table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                            cell = table.cell(0, 0)
+                                            paragraph = cell.paragraphs[0]
+                                            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                            run = paragraph.add_run()
+                                            run.add_picture(img_path, width=Inches(6))
+                                            cap = cell.add_paragraph(bullet_text)
+                                            cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                    except Exception:
+                                        pass
+                                continue
+                    p = doc.add_paragraph(line)
+                    p.paragraph_format.space_after = Inches(0.05)
+                    p.paragraph_format.line_spacing = 1.15
+            # Subtasks as checkboxes
+            if step.subtasks.exists():
+                for t in step.subtasks.all().order_by('order', 'id'):
+                    box = '☑' if t.completed else '☐'
+                    doc.add_paragraph(f'{box} {t.text}')
+
+            # Include pasted job images (documentation)
+            if step.images.exists():
+                for jim in step.images.all().order_by('order', 'id'):
+                    try:
+                        img_path = os.path.join(settings.MEDIA_ROOT, str(jim.image))
+                        if os.path.exists(img_path):
+                            p = doc.add_paragraph()
+                            r = p.add_run()
+                            r.add_picture(img_path, width=Inches(6))
+                    except Exception:
+                        pass
+
+            # Include step notes (emphasized title + boxed area)
+            if step.notes:
+                doc.add_heading('NOTES', level=3)
+                # Box container using single-cell table with borders
+                table = doc.add_table(rows=1, cols=1)
+                cell = table.cell(0, 0)
+                # Apply borders
+                try:
+                    from docx.oxml.shared import OxmlElement, qn
+                    tc = cell._tc
+                    tcPr = tc.get_or_add_tcPr()
+                    tcBorders = OxmlElement('w:tcBorders')
+                    for border_name in ['top', 'left', 'bottom', 'right']:
+                        border = OxmlElement(f'w:{border_name}')
+                        border.set(qn('w:val'), 'single')
+                        border.set(qn('w:sz'), '16')
+                        border.set(qn('w:space'), '0')
+                        border.set(qn('w:color'), '555555')
+                        tcBorders.append(border)
+                    tcPr.append(tcBorders)
+                except Exception:
+                    pass
+                # Add notes content inside the box
+                # Clear default empty paragraph
+                cell.text = ''
+                for ln in step.notes.split('\n'):
+                    if ln.strip().startswith('- '):
+                        p = cell.add_paragraph(ln.strip()[2:].strip(), style='List Bullet')
+                    else:
+                        p = cell.add_paragraph(ln)
+
+            if show_attachments:
+                src = source_by_order.get(step.order)
+                if src and src.images.exists():
+                    for img in src.images.all():
+                        if img.substep_index is None:
+                            try:
+                                img_path = os.path.join(settings.MEDIA_ROOT, str(img.image))
+                                if os.path.exists(img_path):
+                                    table = doc.add_table(rows=1, cols=1)
+                                    table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                    cell = table.cell(0, 0)
+                                    paragraph = cell.paragraphs[0]
+                                    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                    run = paragraph.add_run()
+                                    run.add_picture(img_path, width=Inches(6))
+                            except Exception:
+                                pass
+    doc_io = BytesIO()
+    doc.settings.odd_and_even_pages_header_footer = False
+    doc.save(doc_io)
+    doc_io.seek(0)
+    from datetime import datetime
+    timestamp_date = datetime.now().strftime('%m-%d-%y')
+    timestamp_time = datetime.now().strftime('%I-%M%p').lower()
+    safe_title = ''.join(c for c in job.name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+    status_text = job.get_status_display().upper()
+    filename = f"{safe_title} {status_text} -- {timestamp_date} -- {timestamp_time}.docx"
+    response = HttpResponse(doc_io.getvalue(), content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    response['Content-Disposition'] = f'attachment; filename="{quote(filename)}"'
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response['Pragma'] = 'no-cache'
+    response['Expires'] = '0'
+    return response
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def template_publish(request, tpl_id: int):
+    template = get_object_or_404(ProcessTemplate, id=tpl_id)
+    is_active = request.POST.get('is_active') in ['1', 'true', 'True', 'on']
+    template.is_active = is_active
+    template.save(update_fields=['is_active', 'updated_at'])
+    return JsonResponse({'ok': True, 'is_active': template.is_active})
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def template_create_from_selected(request):
+    ids = request.POST.getlist('process_ids[]') or request.POST.getlist('process_ids')
+    name = (request.POST.get('name') or '').strip()
+    module_id = request.POST.get('module')
+    if not ids or not name or not module_id:
+        return JsonResponse({'ok': False, 'error': 'Name, module and processes are required'}, status=400)
+    processes = list(Process.objects.filter(id__in=ids))
+    by_id = {str(p.id): p for p in processes}
+    ordered = [by_id.get(pid) for pid in ids if by_id.get(pid)]
+    if not ordered:
+        return JsonResponse({'ok': False, 'error': 'No valid processes found'}, status=400)
+    with transaction.atomic():
+        max_order = Process.objects.aggregate(models.Max('order')).get('order__max') or 0
+        try:
+            module = Module.objects.get(id=module_id)
+        except Module.DoesNotExist:
+            return JsonResponse({'ok': False, 'error': 'Invalid module'}, status=400)
+        new_process = Process.objects.create(name=name, order=max_order + 1, module=module)
+        step_order = 1
+        for proc in ordered:
+            for st in proc.steps.all().order_by('order', 'id'):
+                Step.objects.create(process=new_process, order=step_order, title=st.title, details=st.details)
+                step_order += 1
+        tpl = sync_process_to_template(new_process.id)
+    return JsonResponse({'ok': True, 'template_id': tpl.id})
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def job_subtask_toggle(request, subtask_id: int):
+    subtask = get_object_or_404(JobSubtask.objects.select_related('job_step', 'job_step__job'), id=subtask_id)
+    completed = request.POST.get('completed') in ['1', 'true', 'True', 'on']
+    subtask.completed = completed
+    subtask.save(update_fields=['completed', 'updated_at'])
+    # If all subtasks completed for a step, mark step completed; else if any started, mark in_progress
+    step = subtask.job_step
+    if step.subtasks.exists():
+        if step.subtasks.filter(completed=False).count() == 0:
+            _update_job_step(step.job, step, 'completed')
+        else:
+            _update_job_step(step.job, step, 'in_progress')
+    # Update job status based on any completed subtasks overall
+    job = step.job
+    from django.db.models import Q
+    any_done = JobSubtask.objects.filter(job_step__job=job, completed=True).exists()
+    if any_done and job.status == 'not_started':
+        job.status = 'in_progress'
+        if not job.started_at:
+            job.started_at = timezone.now()
+        job.save(update_fields=['status', 'started_at', 'updated_at'])
+    if not any_done:
+        # If nothing done and no steps in progress/completed, revert to not_started
+        if not job.steps.filter(Q(status='in_progress') | Q(status='completed')).exists():
+            job.status = 'not_started'
+            job.started_at = None
+            job.save(update_fields=['status', 'started_at', 'updated_at'])
+    return JsonResponse({'ok': True})
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def job_step_notes_update(request, job_step_id: int):
+    step = get_object_or_404(JobStep, id=job_step_id)
+    step.notes = request.POST.get('notes', '')
+    step.save(update_fields=['notes', 'updated_at'])
+    return JsonResponse({'ok': True})
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def job_step_image_upload(request, job_step_id: int):
+    step = get_object_or_404(JobStep, id=job_step_id)
+    img_file = request.FILES.get('image') or request.FILES.get('file')
+    if not img_file:
+        return JsonResponse({'ok': False, 'error': 'No image provided'}, status=400)
+    sub_idx = request.POST.get('subtask_index')
+    try:
+        sub_idx = int(sub_idx) if sub_idx not in (None, '') else None
+    except (TypeError, ValueError):
+        sub_idx = None
+    max_order = step.images.aggregate(models.Max('order')).get('order__max') or 0
+    jsi = JobStepImage.objects.create(job_step=step, image=img_file, order=max_order + 1, subtask_index=sub_idx)
+    return JsonResponse({'ok': True, 'id': jsi.id, 'url': jsi.image.url})
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def job_step_image_delete(request, job_step_id: int, image_id: int):
+    step = get_object_or_404(JobStep, id=job_step_id)
+    img = get_object_or_404(JobStepImage, id=image_id, job_step=step)
+    img.delete()
+    return JsonResponse({'ok': True})
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def job_update_from_template(request, job_id: int):
+    job = get_object_or_404(Job.objects.select_related('template'), id=job_id)
+    tpl = job.template
+    # Merge template changes into job while retaining subtask completion by index
+    with transaction.atomic():
+        # Build maps of current job steps and subtasks
+        job_steps_by_order = {js.order: js for js in job.steps.all().prefetch_related('subtasks')}
+        # Ensure JobSteps exist for each TemplateStep
+        for ts in tpl.steps.all().order_by('order', 'id'):
+            js = job_steps_by_order.get(ts.order)
+            if js is None:
+                js = JobStep.objects.create(job=job, order=ts.order, title=ts.title, details=ts.details or '')
+                job_steps_by_order[ts.order] = js
+            else:
+                js.title = ts.title
+                js.details = ts.details or ''
+                js.save(update_fields=['title', 'details', 'updated_at'])
+            # Sync subtasks by bullet index, preserving completion
+            # Extract bullets from TemplateStep details
+            bullets = []
+            if ts.details:
+                for line in ts.details.split('\n'):
+                    if line.strip().startswith('- '):
+                        bullets.append(line.strip()[2:].strip())
+            existing = list(js.subtasks.all().order_by('order', 'id'))
+            # Adjust counts
+            for i, text in enumerate(bullets):
+                if i < len(existing):
+                    st = existing[i]
+                    if st.text != text:
+                        st.text = text
+                        st.save(update_fields=['text', 'updated_at'])
+                else:
+                    JobSubtask.objects.create(job_step=js, order=i, text=text)
+            # Delete any extra subtasks beyond new bullets
+            if len(existing) > len(bullets):
+                for st in existing[len(bullets):]:
+                    st.delete()
+        # Reorder any job steps to match template orders (preserve others)
+        for js in job.steps.all():
+            # if its order not in template, keep as is; else already aligned
+            pass
+        job.template_version_at_create = tpl.version
+        job.save(update_fields=['template_version_at_create', 'updated_at'])
+    return redirect('process_creator:job_detail', job_id=job.id)

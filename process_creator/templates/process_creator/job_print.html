@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="p-6">
+  <h1 class="text-3xl font-bold mb-2">{{ JOB_LABEL }}: {{ job.name }}</h1>
+  <div class="opacity-70 mb-6">Template: {{ job.template.name }} • Created {{ job.created_at }}</div>
+
+  <ol class="list-decimal ml-6 space-y-4">
+    {% for s in steps %}
+      <li>
+        <div class="font-semibold">{{ s.title }}</div>
+        {% if s.details %}
+          <div class="whitespace-pre-wrap">{{ s.details }}</div>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ol>
+</div>
+{% endblock %}
+

@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 
 
 class Module(models.Model):
@@ -124,4 +125,122 @@ class AIInteraction(models.Model):
     def __str__(self):
         return f"{self.process.name} - {self.get_interaction_type_display()} - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
 
-# Create your models here.
+class ProcessTemplate(models.Model):
+    name = models.CharField(max_length=255)
+    module = models.ForeignKey(Module, on_delete=models.SET_NULL, null=True, blank=True)
+    source_process = models.OneToOneField(Process, on_delete=models.CASCADE, related_name="template")
+    version = models.PositiveIntegerField(default=1)
+    description = models.TextField(blank=True)
+    notes = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at", "name"]
+
+    def __str__(self) -> str:
+        return f"{self.name} (v{self.version})"
+
+
+class TemplateStep(models.Model):
+    template = models.ForeignKey(ProcessTemplate, related_name="steps", on_delete=models.CASCADE)
+    order = models.PositiveIntegerField()
+    title = models.CharField(max_length=255)
+    details = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+        unique_together = ("template", "order")
+
+    def __str__(self) -> str:
+        return f"{self.order}. {self.title}"
+
+
+class Job(models.Model):
+    STATUS_CHOICES = [
+        ("not_started", "Not Started"),
+        ("in_progress", "In Progress"),
+        ("completed", "Completed"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    template = models.ForeignKey(ProcessTemplate, related_name="jobs", on_delete=models.CASCADE)
+    name = models.CharField(max_length=255)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_started")
+    assigned_to = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="process_jobs")
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    template_version_at_create = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        ordering = ["-created_at", "name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class JobStep(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("in_progress", "In Progress"),
+        ("completed", "Completed"),
+        ("blocked", "Blocked"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    job = models.ForeignKey(Job, related_name="steps", on_delete=models.CASCADE)
+    order = models.PositiveIntegerField()
+    title = models.CharField(max_length=255)
+    details = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    assigned_to = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="process_job_steps")
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+        unique_together = ("job", "order")
+
+    def __str__(self) -> str:
+        return f"{self.order}. {self.title}"
+
+
+class JobSubtask(models.Model):
+    job_step = models.ForeignKey(JobStep, related_name="subtasks", on_delete=models.CASCADE)
+    order = models.PositiveIntegerField()
+    text = models.TextField()
+    completed = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+        unique_together = ("job_step", "order")
+
+    def __str__(self) -> str:
+        return f"{self.order}. {self.text[:40]}"
+
+
+def job_step_image_upload_path(instance, filename: str) -> str:
+    return f"process_screenshots/job_{instance.job_step.job_id}/step_{instance.job_step_id}/{filename}"
+
+
+class JobStepImage(models.Model):
+    job_step = models.ForeignKey(JobStep, related_name="images", on_delete=models.CASCADE)
+    subtask_index = models.IntegerField(null=True, blank=True)
+    image = models.ImageField(upload_to=job_step_image_upload_path)
+    order = models.PositiveIntegerField(default=1)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+

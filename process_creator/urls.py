@@ -45,6 +45,31 @@ urlpatterns = [
     path("bulk/analyze/", views.bulk_analyze, name="bulk_analyze"),
     path("bulk/pdf/", views.bulk_pdf, name="bulk_pdf"),
     path("bulk/word/", views.bulk_word, name="bulk_word"),
+    # Templates
+    path("templates/", views.template_list, name="template_list"),
+    path("templates/<int:tpl_id>/", views.template_detail, name="template_detail"),
+    # Jobs
+    path("jobs/", views.job_list, name="job_list"),
+    path("jobs/create/<int:tpl_id>/", views.job_create, name="job_create"),
+    path("jobs/<int:job_id>/", views.job_detail, name="job_detail"),
+    path("jobs/<int:job_id>/start/", views.job_start, name="job_start"),
+    path("jobs/<int:job_id>/steps/<int:job_step_id>/start/", views.job_step_start, name="job_step_start"),
+    path("jobs/<int:job_id>/steps/<int:job_step_id>/complete/", views.job_step_complete, name="job_step_complete"),
+    path("jobs/<int:job_id>/steps/<int:job_step_id>/block/", views.job_step_block, name="job_step_block"),
+    path("jobs/<int:job_id>/steps/<int:job_step_id>/unblock/", views.job_step_unblock, name="job_step_unblock"),
+    # Job Exports
+    path("jobs/<int:job_id>/print/", views.job_print, name="job_print"),
+    path("jobs/<int:job_id>/pdf/", views.job_pdf, name="job_pdf"),
+    path("jobs/<int:job_id>/word/", views.job_word, name="job_word"),
+    # Publish template
+    path("templates/<int:tpl_id>/publish/", views.template_publish, name="template_publish"),
+    path("templates/create-from-selected/", views.template_create_from_selected, name="template_create_from_selected"),
+    # Subtasks and update-from-template
+    path("subtasks/<int:subtask_id>/toggle/", views.job_subtask_toggle, name="job_subtask_toggle"),
+    path("jobs/<int:job_id>/update-from-template/", views.job_update_from_template, name="job_update_from_template"),
+    path("steps/<int:job_step_id>/notes/", views.job_step_notes_update, name="job_step_notes_update"),
+    path("steps/<int:job_step_id>/images/upload/", views.job_step_image_upload, name="job_step_image_upload"),
+    path("steps/<int:job_step_id>/images/<int:image_id>/delete/", views.job_step_image_delete, name="job_step_image_delete"),
 ]
 
 
