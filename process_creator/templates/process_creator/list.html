@@ -428,9 +428,8 @@ document.getElementById('create-template-selected').addEventListener('click', as
   const ids = Array.from(document.querySelectorAll('#process-list .card'))
     .filter(c=>c.querySelector('.select-item').checked)
     .map(c=>c.dataset.id);
-  if (ids.length === 0) { showToast('Select one process to create a template from', 'error'); return; }
-  if (ids.length > 1) { showToast('Please select only one process to create a template from', 'error'); return; }
-  const name = prompt('New Template Name');
+  if (ids.length === 0) { showToast('Select at least one process to create a template from', 'error'); return; }
+  const name = prompt(`New Template Name (combining ${ids.length} processes)`);
   if (!name) return;
   const moduleId = document.getElementById('new-template-module').value;
   if (!moduleId) { showToast('Select a Module for the new template', 'error'); return; }
@@ -441,7 +440,7 @@ document.getElementById('create-template-selected').addEventListener('click', as
   const res = await fetch('{% url "process_creator:template_create_from_selected" %}', {method:'POST', headers:{'X-CSRFToken': getCookie('csrftoken')}, body: form});
   const data = await res.json();
   if (data.ok) {
-    showToast('Template created and linked to original process', 'success');
+    showToast(`Template created from ${ids.length} processes`, 'success');
     window.location.href = '{% url "process_creator:template_detail" 0 %}'.replace('0', data.template_id);
   } else {
     showToast(data.error || 'Failed to create template', 'error');

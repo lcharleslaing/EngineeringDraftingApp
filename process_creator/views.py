@@ -2283,36 +2283,60 @@ def template_create_from_selected(request):
     if not ids or not name or not module_id:
         return JsonResponse({'ok': False, 'error': 'Name, module and processes are required'}, status=400)
     
-    # Only allow creating template from a single process to maintain the link
-    if len(ids) != 1:
-        return JsonResponse({'ok': False, 'error': 'Please select exactly one process to create a template from'}, status=400)
-    
     try:
-        source_process = Process.objects.get(id=ids[0])
+        source_processes = Process.objects.filter(id__in=ids).order_by('order')
         module = Module.objects.get(id=module_id)
     except (Process.DoesNotExist, Module.DoesNotExist):
         return JsonResponse({'ok': False, 'error': 'Invalid process or module'}, status=400)
     
+    if not source_processes.exists():
+        return JsonResponse({'ok': False, 'error': 'No valid processes found'}, status=400)
+    
     with transaction.atomic():
-        # Check if a template already exists for this process
-        existing_template = ProcessTemplate.objects.filter(source_process=source_process).first()
-        if existing_template:
-            return JsonResponse({'ok': False, 'error': f'A template already exists for this process: "{existing_template.name}". Please delete it first or choose a different process.'}, status=400)
+        # Create a new combined process from the selected processes
+        combined_process = Process.objects.create(
+            name=f"Template: {name}",
+            module=module,
+            description=f"Combined template from {len(source_processes)} processes",
+            summary=f"Template combining: {', '.join([p.name for p in source_processes])}"
+        )
         
-        # Create template directly linked to the source process
+        # Copy steps from all selected processes in order
+        step_order = 1
+        for process in source_processes:
+            for step in process.steps.all().order_by('order'):
+                # Create new step in combined process
+                new_step = Step.objects.create(
+                    process=combined_process,
+                    order=step_order,
+                    title=step.title,
+                    details=step.details
+                )
+                step_order += 1
+                
+                # Copy step images
+                for step_image in step.images.all():
+                    StepImage.objects.create(
+                        step=new_step,
+                        image=step_image.image,
+                        order=step_image.order,
+                        substep_index=step_image.substep_index
+                    )
+        
+        # Create template linked to the combined process
         template = ProcessTemplate.objects.create(
             name=name,
             module=module,
-            source_process=source_process,
-            description=source_process.summary or source_process.description or '',
+            source_process=combined_process,
+            description=combined_process.summary or combined_process.description or '',
             is_active=True
         )
         
-        # Auto-sync template from the source process (this will create TemplateSteps)
+        # Auto-sync template from the combined process
         from .services.templates import sync_process_to_template
-        sync_process_to_template(source_process.id)
+        sync_process_to_template(combined_process.id)
         
-        return JsonResponse({'ok': True, 'template_id': template.id, 'process_id': source_process.id})
+        return JsonResponse({'ok': True, 'template_id': template.id, 'process_id': combined_process.id})
 
 
 @login_required
