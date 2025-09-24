@@ -171,11 +171,11 @@ def process_list(request):
     if selected_module_id:
         try:
             selected_module = Module.objects.get(id=selected_module_id)
-            processes = Process.objects.filter(module=selected_module).order_by('-updated_at', '-created_at')
+            processes = Process.objects.filter(module=selected_module).order_by('order')
         except Module.DoesNotExist:
-            processes = Process.objects.all().order_by('-updated_at', '-created_at')
+            processes = Process.objects.all().order_by('order')
     else:
-        processes = Process.objects.all().order_by('-updated_at', '-created_at')
+        processes = Process.objects.all().order_by('order')
     
     return render(request, "process_creator/list.html", {
         "processes": processes,
@@ -461,6 +461,7 @@ def step_delete(request, pk: int, step_id: int):
 def step_image_upload(request, pk: int, step_id: int):
     process = get_object_or_404(Process, pk=pk)
     step = get_object_or_404(Step, pk=step_id, process=process)
+    print(f"DEBUG: Uploading image to Process {process.id} ({process.name}), Step {step.id} ({step.title})")
     # Expect an image file under 'image' or a pasted blob as 'file'
     file = request.FILES.get('image') or request.FILES.get('file')
     if not file:
@@ -1895,8 +1896,9 @@ def job_create(request, tpl_id: int):
 @require_app_access('process_creator', action='view')
 def job_detail(request, job_id: int):
     job = get_object_or_404(Job.objects.select_related('template', 'template__module').prefetch_related('steps', 'steps__subtasks', 'steps__images'), id=job_id)
-    source_steps = list(job.template.source_process.steps.all()) if job.template and job.template.source_process_id else []
+    source_steps = list(job.template.source_process.steps.prefetch_related('images').all()) if job.template and job.template.source_process_id else []
     source_by_order = {s.order: s for s in source_steps}
+    source_image_counts = {s.order: (s.images.all().count()) for s in source_steps}
     completed = sum(1 for s in job.steps.all() if s.status == 'completed')
     total = job.steps.count()
     blocked = sum(1 for s in job.steps.all() if s.status == 'blocked')
@@ -1922,6 +1924,7 @@ def job_detail(request, job_id: int):
         'template_newer': template_newer,
         'overall_percent': overall_percent,
         'step_percents': step_percents,
+        'source_image_counts': source_image_counts,
     })
 
 
@@ -2091,13 +2094,25 @@ def job_word(request, job_id: int):
                                     try:
                                         img_path = os.path.join(settings.MEDIA_ROOT, str(img.image))
                                         if os.path.exists(img_path):
+                                            # Get image dimensions to scale appropriately
+                                            from PIL import Image
+                                            with Image.open(img_path) as img_pil:
+                                                width_px, height_px = img_pil.size
+                                                # Calculate width based on image size relative to typical screen (1920px)
+                                                # Full screen = 6 inches, smaller images scale down proportionally
+                                                screen_width_px = 1920  # Typical screen width
+                                                max_width_inches = 6.0
+                                                calculated_width = min(max_width_inches, (width_px / screen_width_px) * max_width_inches)
+                                                # Ensure minimum readable size
+                                                final_width = max(1.5, calculated_width)
+                                            
                                             table = doc.add_table(rows=1, cols=1)
                                             table.alignment = WD_ALIGN_PARAGRAPH.CENTER
                                             cell = table.cell(0, 0)
                                             paragraph = cell.paragraphs[0]
                                             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
                                             run = paragraph.add_run()
-                                            run.add_picture(img_path, width=Inches(6))
+                                            run.add_picture(img_path, width=Inches(final_width))
                                             cap = cell.add_paragraph(bullet_text)
                                             cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
                                     except Exception:
@@ -2108,9 +2123,39 @@ def job_word(request, job_id: int):
                     p.paragraph_format.line_spacing = 1.15
             # Subtasks as checkboxes
             if step.subtasks.exists():
-                for t in step.subtasks.all().order_by('order', 'id'):
+                for idx, t in enumerate(step.subtasks.all().order_by('order', 'id')):
                     box = '☑' if t.completed else '☐'
                     doc.add_paragraph(f'{box} {t.text}')
+                    
+                    # Show images attached to this specific subtask
+                    subtask_images = step.images.filter(subtask_index=idx)
+                    if subtask_images.exists():
+                        for jim in subtask_images.order_by('order', 'id'):
+                            try:
+                                img_path = os.path.join(settings.MEDIA_ROOT, str(jim.image))
+                                if os.path.exists(img_path):
+                                    # Get image dimensions to scale appropriately
+                                    from PIL import Image
+                                    with Image.open(img_path) as img:
+                                        width_px, height_px = img.size
+                                        # Calculate width based on image size relative to typical screen (1920px)
+                                        # Full screen = 6 inches, smaller images scale down proportionally
+                                        screen_width_px = 1920  # Typical screen width
+                                        max_width_inches = 6.0
+                                        calculated_width = min(max_width_inches, (width_px / screen_width_px) * max_width_inches)
+                                        # Ensure minimum readable size
+                                        final_width = max(1.5, calculated_width)
+                                    
+                                    p = doc.add_paragraph()
+                                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                    r = p.add_run()
+                                    r.add_picture(img_path, width=Inches(final_width))
+                                    # Add caption
+                                    cap = doc.add_paragraph(f"Image for: {t.text[:50]}{'...' if len(t.text) > 50 else ''}")
+                                    cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                    cap.paragraph_format.font.size = Inches(0.1)
+                            except Exception:
+                                pass
 
             # Include pasted job images (documentation)
             if step.images.exists():
@@ -2118,9 +2163,22 @@ def job_word(request, job_id: int):
                     try:
                         img_path = os.path.join(settings.MEDIA_ROOT, str(jim.image))
                         if os.path.exists(img_path):
+                            # Get image dimensions to scale appropriately
+                            from PIL import Image
+                            with Image.open(img_path) as img:
+                                width_px, height_px = img.size
+                                # Calculate width based on image size relative to typical screen (1920px)
+                                # Full screen = 6 inches, smaller images scale down proportionally
+                                screen_width_px = 1920  # Typical screen width
+                                max_width_inches = 6.0
+                                calculated_width = min(max_width_inches, (width_px / screen_width_px) * max_width_inches)
+                                # Ensure minimum readable size
+                                final_width = max(1.5, calculated_width)
+                            
                             p = doc.add_paragraph()
+                            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                             r = p.add_run()
-                            r.add_picture(img_path, width=Inches(6))
+                            r.add_picture(img_path, width=Inches(final_width))
                     except Exception:
                         pass
 
@@ -2163,13 +2221,25 @@ def job_word(request, job_id: int):
                             try:
                                 img_path = os.path.join(settings.MEDIA_ROOT, str(img.image))
                                 if os.path.exists(img_path):
+                                    # Get image dimensions to scale appropriately
+                                    from PIL import Image
+                                    with Image.open(img_path) as img_pil:
+                                        width_px, height_px = img_pil.size
+                                        # Calculate width based on image size relative to typical screen (1920px)
+                                        # Full screen = 6 inches, smaller images scale down proportionally
+                                        screen_width_px = 1920  # Typical screen width
+                                        max_width_inches = 6.0
+                                        calculated_width = min(max_width_inches, (width_px / screen_width_px) * max_width_inches)
+                                        # Ensure minimum readable size
+                                        final_width = max(1.5, calculated_width)
+                                    
                                     table = doc.add_table(rows=1, cols=1)
                                     table.alignment = WD_ALIGN_PARAGRAPH.CENTER
                                     cell = table.cell(0, 0)
                                     paragraph = cell.paragraphs[0]
                                     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
                                     run = paragraph.add_run()
-                                    run.add_picture(img_path, width=Inches(6))
+                                    run.add_picture(img_path, width=Inches(final_width))
                             except Exception:
                                 pass
     doc_io = BytesIO()
@@ -2187,6 +2257,9 @@ def job_word(request, job_id: int):
     response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response['Pragma'] = 'no-cache'
     response['Expires'] = '0'
+    # Force download to Downloads folder and auto-open
+    response['Content-Type'] = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    response['X-Content-Type-Options'] = 'nosniff'
     return response
 
 @login_required
@@ -2224,7 +2297,19 @@ def template_create_from_selected(request):
         step_order = 1
         for proc in ordered:
             for st in proc.steps.all().order_by('order', 'id'):
-                Step.objects.create(process=new_process, order=step_order, title=st.title, details=st.details)
+                new_step = Step.objects.create(process=new_process, order=step_order, title=st.title, details=st.details)
+                # Copy images from source step to new step
+                for img in st.images.all().order_by('order', 'id'):
+                    from django.core.files.base import ContentFile
+                    import os
+                    if os.path.exists(img.image.path):
+                        with open(img.image.path, 'rb') as f:
+                            StepImage.objects.create(
+                                step=new_step, 
+                                image=ContentFile(f.read(), name=os.path.basename(img.image.name)),
+                                order=img.order,
+                                substep_index=img.substep_index
+                            )
                 step_order += 1
         tpl = sync_process_to_template(new_process.id)
     return JsonResponse({'ok': True, 'template_id': tpl.id})
@@ -2321,27 +2406,30 @@ def job_update_from_template(request, job_id: int):
                 js.title = ts.title
                 js.details = ts.details or ''
                 js.save(update_fields=['title', 'details', 'updated_at'])
-            # Sync subtasks by bullet index, preserving completion
+            # Sync subtasks - preserve ALL existing completions
             # Extract bullets from TemplateStep details
             bullets = []
             if ts.details:
                 for line in ts.details.split('\n'):
                     if line.strip().startswith('- '):
                         bullets.append(line.strip()[2:].strip())
-            existing = list(js.subtasks.all().order_by('order', 'id'))
-            # Adjust counts
+            
+            # Get existing subtasks and their completion status
+            existing_subtasks = list(js.subtasks.all().order_by('order', 'id'))
+            completed_texts = {st.text: st.completed for st in existing_subtasks}
+            
+            # Clear existing subtasks
+            js.subtasks.all().delete()
+            
+            # Create new subtasks, preserving completion status by text matching
             for i, text in enumerate(bullets):
-                if i < len(existing):
-                    st = existing[i]
-                    if st.text != text:
-                        st.text = text
-                        st.save(update_fields=['text', 'updated_at'])
-                else:
-                    JobSubtask.objects.create(job_step=js, order=i, text=text)
-            # Delete any extra subtasks beyond new bullets
-            if len(existing) > len(bullets):
-                for st in existing[len(bullets):]:
-                    st.delete()
+                completed = completed_texts.get(text, False)  # Keep completion if text matches
+                JobSubtask.objects.create(
+                    job_step=js, 
+                    order=i, 
+                    text=text, 
+                    completed=completed
+                )
         # Reorder any job steps to match template orders (preserve others)
         for js in job.steps.all():
             # if its order not in template, keep as is; else already aligned

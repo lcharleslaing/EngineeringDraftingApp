@@ -21,6 +21,7 @@
     <div class="badge badge-primary">{{ progress.completed }}/{{ progress.total }} Completed</div>
     <div class="badge badge-info">{{ overall_percent }}% Overall</div>
     {% if progress.blocked %}<div class="badge badge-error">{{ progress.blocked }} Blocked</div>{% endif %}
+    <!-- Debug: template_newer={{ template_newer }}, job.template.version={{ job.template.version }}, job.template_version_at_create={{ job.template_version_at_create }} -->
     {% if template_newer %}
       <div class="badge badge-warning">Template updated (v{{ job.template.version }})</div>
       <form method="post" action="{% url 'process_creator:job_update_from_template' job.id %}">
@@ -53,9 +54,9 @@
                 <a class="btn btn-xs" href="{% url 'process_creator:job_step_unblock' job.id s.id %}">Unblock</a>
               {% endif %}
               <div class="badge">{{ s.get_status_display }}</div>
-              {% with src=source_by_order|dict_get:s.order %}
-                {% if src and src.images.count %}
-                  <button class="btn btn-xs js-toggle-images" data-step="{{ s.order }}">View Images</button>
+              {% with n=source_image_counts|dict_get:s.order %}
+                {% if n %}
+                  <button type="button" class="btn btn-xs js-toggle-images" data-step="{{ s.order }}">View Images ({{ n }})</button>
                 {% endif %}
               {% endwith %}
             </div>
@@ -68,11 +69,14 @@
               <label class="label cursor-pointer justify-start gap-2">
                 <input type="checkbox" class="checkbox checkbox-sm js-subtask" data-id="{{ t.id }}" {% if t.completed %}checked{% endif %}>
                 <span>{{ t.text }}</span>
-                {% with src=source_by_order|dict_get:s.order %}
-                  {% if src and src|has_sub_images:forloop.counter0 %}
-                    <button type="button" class="btn btn-ghost btn-xs js-toggle-images" data-step="{{ s.order }}" data-sub="{{ forloop.counter0 }}">Images</button>
-                  {% endif %}
-                {% endwith %}
+                <div class="flex gap-1 ml-auto">
+                  {% with src=source_by_order|dict_get:s.order %}
+                    {% if src and src|has_sub_images:forloop.counter0 %}
+                      <button type="button" class="btn btn-ghost btn-xs js-toggle-images" data-step="{{ s.order }}" data-sub="{{ forloop.counter0 }}">Images</button>
+                    {% endif %}
+                  {% endwith %}
+                  <button type="button" class="btn btn-ghost btn-xs js-paste-subtask-image" data-step="{{ s.id }}" data-subtask="{{ forloop.counter0 }}" title="Paste image for this subtask">📋</button>
+                </div>
               </label>
                 </li>
               {% endfor %}
@@ -235,9 +239,48 @@ async function uploadImageToStep(stepId, file, subIdx){
     if (thumbs) {
       const wrap = document.createElement('div');
       wrap.className = 'relative group';
-      wrap.innerHTML = `<img src="${data.url}" class=\"w-20 h-20 object-cover rounded cursor-pointer js-thumb border border-base-300\" data-full=\"${data.url}\" />
-                        <button class=\"btn btn-xs btn-error absolute -top-2 -right-2 hidden group-hover:block js-del-thumb\" data-step=\"${stepId}\" data-img=\"${data.id}\">✕</button>`;
-      thumbs.appendChild(wrap);
+      
+      // Create image element to get dimensions
+      const img = new Image();
+      img.onload = function() {
+        const aspectRatio = this.width / this.height;
+        const maxSize = 80; // Base size
+        let width, height;
+        
+        if (aspectRatio > 1) {
+          // Landscape - width is max
+          width = maxSize;
+          height = maxSize / aspectRatio;
+        } else {
+          // Portrait or square - height is max
+          height = maxSize;
+          width = maxSize * aspectRatio;
+        }
+        
+        // Ensure minimum size
+        const minSize = 40;
+        if (width < minSize) {
+          width = minSize;
+          height = minSize / aspectRatio;
+        }
+        if (height < minSize) {
+          height = minSize;
+          width = minSize * aspectRatio;
+        }
+        
+        wrap.innerHTML = `<img src="${data.url}" class="object-cover rounded cursor-pointer js-thumb border border-base-300" data-full="${data.url}" style="width: ${width}px; height: ${height}px;" />
+                          <button class="btn btn-xs btn-error absolute -top-2 -right-2 hidden group-hover:block js-del-thumb" data-step="${stepId}" data-img="${data.id}">✕</button>`;
+        thumbs.appendChild(wrap);
+      };
+      img.src = data.url;
+    }
+    // Show a brief success message for subtask images
+    if (subIdx !== null && subIdx !== undefined) {
+      const toast = document.createElement('div');
+      toast.className = 'toast toast-top toast-end';
+      toast.innerHTML = '<div class="alert alert-success"><span>Image attached to subtask ' + (subIdx + 1) + '</span></div>';
+      document.body.appendChild(toast);
+      setTimeout(()=>toast.remove(), 2000);
     }
   }
 }
@@ -272,19 +315,88 @@ document.querySelectorAll('.js-paste-image').forEach(btn=>{
   });
 });
 
+// Paste image for specific subtask
+document.querySelectorAll('.js-paste-subtask-image').forEach(btn=>{
+  btn.addEventListener('click', async ()=>{
+    try {
+      const items = await navigator.clipboard.read();
+      for (const it of items) {
+        for (const type of it.types) {
+          if (type.startsWith('image/')) {
+            const blob = await it.getType(type);
+            const file = new File([blob], 'pasted.png', {type});
+            const stepId = btn.dataset.step;
+            const subtaskIndex = parseInt(btn.dataset.subtask);
+            await uploadImageToStep(stepId, file, subtaskIndex);
+            return;
+          }
+        }
+      }
+      alert('No image found in clipboard. Use the file picker or copy an image first.');
+    } catch (err) {
+      alert('Clipboard image read not supported. Try the file picker.');
+    }
+  });
+});
+
 // Delete thumbnails
 document.querySelectorAll('.js-del-thumb').forEach(btn=>{
   btn.addEventListener('click', async (e)=>{
     e.stopPropagation();
     const stepId = btn.dataset.step;
     const imgId = btn.dataset.img;
-    if (!confirm('Delete this image?')) return;
-    const res = await fetch('{% url "process_creator:job_step_image_delete" 0 0 %}'.replace('0 0',''+stepId+'/'+imgId), {method:'POST', headers:{'X-CSRFToken': (document.cookie.split('csrftoken=')[1]||'').split(';')[0]}});
+    console.log('Deleting image:', stepId, imgId); // Debug log
+    const url = `/process-creator/steps/${stepId}/images/${imgId}/delete/`;
+    console.log('Delete URL:', url); // Debug log
+    const res = await fetch(url, {method:'POST', headers:{'X-CSRFToken': (document.cookie.split('csrftoken=')[1]||'').split(';')[0]}});
     if (res.ok) {
       const wrapper = btn.parentElement; wrapper.remove();
+    } else {
+      console.error('Delete failed:', res.status, res.statusText);
     }
   });
 });
+
+// Resize existing thumbnails proportionally
+document.querySelectorAll('.js-thumb').forEach(img => {
+  img.onload = function() {
+    const aspectRatio = this.naturalWidth / this.naturalHeight;
+    const maxSize = 80; // Base size
+    let width, height;
+    
+    if (aspectRatio > 1) {
+      // Landscape - width is max
+      width = maxSize;
+      height = maxSize / aspectRatio;
+    } else {
+      // Portrait or square - height is max
+      height = maxSize;
+      width = maxSize * aspectRatio;
+    }
+    
+    // Ensure minimum size
+    const minSize = 40;
+    if (width < minSize) {
+      width = minSize;
+      height = minSize / aspectRatio;
+    }
+    if (height < minSize) {
+      height = minSize;
+      width = minSize * aspectRatio;
+    }
+    
+    this.style.width = width + 'px';
+    this.style.height = height + 'px';
+  };
+  
+  // Trigger onload if image is already loaded
+  if (img.complete) {
+    img.onload();
+  }
+});
+
+// Note: Word downloads are handled by the browser. To auto-open, enable
+// the browser's setting to "Always open files of this type" for .docx.
 </script>
 </div>
 {% endblock %}

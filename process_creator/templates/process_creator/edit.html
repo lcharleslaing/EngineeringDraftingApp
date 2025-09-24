@@ -1105,10 +1105,16 @@ function applyAttachmentVisibility(){
 // Initialize from localStorage (default: off)
 try {
   const saved = localStorage.getItem(TOGGLE_KEY);
-  if (saved === '1') imgToggle.checked = true;
-} catch(e) {}
-imgToggle.addEventListener('change', applyAttachmentVisibility);
-// Apply once on load
+  // Default to showing images unless the user explicitly turned them off
+  imgToggle.checked = (saved === null || saved === '1');
+} catch(e) {
+  imgToggle.checked = true;
+}
+imgToggle.addEventListener('change', ()=>{
+  try { localStorage.setItem(TOGGLE_KEY, imgToggle.checked ? '1' : '0'); } catch(e) {}
+  applyAttachmentVisibility();
+});
+// Apply once on load with the computed default
 applyAttachmentVisibility();
 
 // Toggle for Process Summary section
@@ -1681,16 +1687,48 @@ function addThumb(stepId, data){
   div.setAttribute('data-img-id', data.id);
   div.setAttribute('data-order', data.order || 1);
   div.setAttribute('draggable', 'true');
-  div.innerHTML = `<img src="${data.url}" class="rounded border object-cover w-full h-28" /><button class="btn btn-xs btn-error absolute top-1 right-1 opacity-0 group-hover:opacity-100 delete-img" data-step="${stepId}" data-id="${data.id}">✕</button><div class="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-secondary text-secondary-content flex items-center justify-center text-xs font-bold shadow-lg z-20 border border-base-100">${data.order || 1}</div>`;
-  if (data.substep_index !== null && data.substep_index !== undefined) {
-    div.setAttribute('data-substep-index', data.substep_index);
-  }
-  container.appendChild(div);
   
-  // Renumber all images after adding new one
-  updateImageNumbers(container);
-  // Refresh bullet badges to reflect new connections
-  renderBulletImageBadges(stepId);
+  // Create image element to get dimensions
+  const img = new Image();
+  img.onload = function() {
+    const aspectRatio = this.naturalWidth / this.naturalHeight;
+    const maxHeight = 112; // h-28 = 7rem = 112px
+    const maxWidth = 200; // Reasonable max width for grid
+    let width, height;
+    
+    if (aspectRatio > 1) {
+      // Landscape - width is max
+      width = Math.min(maxWidth, maxHeight * aspectRatio);
+      height = width / aspectRatio;
+    } else {
+      // Portrait or square - height is max
+      height = maxHeight;
+      width = height * aspectRatio;
+    }
+    
+    // Ensure minimum size
+    const minSize = 60;
+    if (width < minSize) {
+      width = minSize;
+      height = minSize / aspectRatio;
+    }
+    if (height < minSize) {
+      height = minSize;
+      width = minSize * aspectRatio;
+    }
+    
+    div.innerHTML = `<img src="${data.url}" class="rounded border object-cover js-step-thumb" style="width: ${width}px; height: ${height}px;" /><button class="btn btn-xs btn-error absolute top-1 right-1 opacity-0 group-hover:opacity-100 delete-img" data-step="${stepId}" data-id="${data.id}">✕</button><div class="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-secondary text-secondary-content flex items-center justify-center text-xs font-bold shadow-lg z-20 border border-base-100">${data.order || 1}</div>`;
+    if (data.substep_index !== null && data.substep_index !== undefined) {
+      div.setAttribute('data-substep-index', data.substep_index);
+    }
+    container.appendChild(div);
+    
+    // Renumber all images after adding new one
+    updateImageNumbers(container);
+    // Refresh bullet badges to reflect new connections
+    renderBulletImageBadges(stepId);
+  };
+  img.src = data.url;
   
   // Event listener is now handled by event delegation above
 }
@@ -2936,6 +2974,48 @@ document.getElementById('steps').addEventListener('click', (e) => {
     enterFocusMode(stepId);
   }
 });
+
+// Resize existing thumbnails proportionally
+document.querySelectorAll('.js-step-thumb').forEach(img => {
+  img.onload = function() {
+    const aspectRatio = this.naturalWidth / this.naturalHeight;
+    const maxHeight = 112; // h-28 = 7rem = 112px
+    const maxWidth = 200; // Reasonable max width for grid
+    let width, height;
+    
+    if (aspectRatio > 1) {
+      // Landscape - width is max
+      width = Math.min(maxWidth, maxHeight * aspectRatio);
+      height = width / aspectRatio;
+    } else {
+      // Portrait or square - height is max
+      height = maxHeight;
+      width = height * aspectRatio;
+    }
+    
+    // Ensure minimum size
+    const minSize = 60;
+    if (width < minSize) {
+      width = minSize;
+      height = minSize / aspectRatio;
+    }
+    if (height < minSize) {
+      height = minSize;
+      width = minSize * aspectRatio;
+    }
+    
+    this.style.width = width + 'px';
+    this.style.height = height + 'px';
+  };
+  
+  // Trigger onload if image is already loaded
+  if (img.complete) {
+    img.onload();
+  }
+});
+
+// Note: Word downloads are handled by the browser. To auto-open, enable
+// the browser's setting to "Always open files of this type" for .docx.
 </script>
 {% endblock %}
 
