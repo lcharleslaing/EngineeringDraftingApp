@@ -521,13 +521,13 @@
               </div>
               <div class="mt-3 img-section step-attachments" id="attachments-{{ step.id }}" style="display: none;">
                 <div class="text-sm opacity-70 mb-1">Screenshots (paste or drop images)</div>
-                <div class="grid grid-cols-2 md:grid-cols-3 gap-2" id="imgs-{{ step.id }}" data-step-id="{{ step.id }}">
+                <div class="grid grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-1" id="imgs-{{ step.id }}" data-step-id="{{ step.id }}">
                   {% for img in step.images.all %}
-                    <div class="relative group draggable-img" data-img-id="{{ img.id }}" data-order="{{ img.order }}" data-substep-index="{{ img.substep_index|default_if_none:'' }}" draggable="true">
-                      <img src="{{ img.image.url }}" class="rounded border object-cover w-full h-28 cursor-pointer js-step-thumb" />
-                      <button class="btn btn-xs btn-error absolute top-1 right-1 opacity-0 group-hover:opacity-100 delete-img" data-step="{{ step.id }}" data-id="{{ img.id }}">✕</button>
+                    <div class="relative group draggable-img aspect-square border border-gray-300 rounded" data-img-id="{{ img.id }}" data-order="{{ img.order }}" data-substep-index="{{ img.substep_index|default_if_none:'' }}" draggable="true">
+                      <img src="{{ img.image.url }}" class="w-full h-full object-cover rounded cursor-pointer js-step-thumb" />
+                      <button class="btn btn-xs btn-error absolute top-0 right-0 opacity-0 group-hover:opacity-100 delete-img" data-step="{{ step.id }}" data-id="{{ img.id }}">✕</button>
                       <!-- Image Number Circle -->
-                      <div class="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-secondary text-secondary-content flex items-center justify-center text-xs font-bold shadow-lg z-20 border border-base-100">
+                      <div class="absolute -top-1 -left-1 w-5 h-5 rounded-full bg-secondary text-secondary-content flex items-center justify-center text-xs font-bold shadow-lg z-20 border border-base-100">
                         {{ img.order }}
                       </div>
                     </div>

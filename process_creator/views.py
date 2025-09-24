@@ -2282,37 +2282,37 @@ def template_create_from_selected(request):
     module_id = request.POST.get('module')
     if not ids or not name or not module_id:
         return JsonResponse({'ok': False, 'error': 'Name, module and processes are required'}, status=400)
-    processes = list(Process.objects.filter(id__in=ids))
-    by_id = {str(p.id): p for p in processes}
-    ordered = [by_id.get(pid) for pid in ids if by_id.get(pid)]
-    if not ordered:
-        return JsonResponse({'ok': False, 'error': 'No valid processes found'}, status=400)
+    
+    # Only allow creating template from a single process to maintain the link
+    if len(ids) != 1:
+        return JsonResponse({'ok': False, 'error': 'Please select exactly one process to create a template from'}, status=400)
+    
+    try:
+        source_process = Process.objects.get(id=ids[0])
+        module = Module.objects.get(id=module_id)
+    except (Process.DoesNotExist, Module.DoesNotExist):
+        return JsonResponse({'ok': False, 'error': 'Invalid process or module'}, status=400)
+    
     with transaction.atomic():
-        max_order = Process.objects.aggregate(models.Max('order')).get('order__max') or 0
-        try:
-            module = Module.objects.get(id=module_id)
-        except Module.DoesNotExist:
-            return JsonResponse({'ok': False, 'error': 'Invalid module'}, status=400)
-        new_process = Process.objects.create(name=name, order=max_order + 1, module=module)
-        step_order = 1
-        for proc in ordered:
-            for st in proc.steps.all().order_by('order', 'id'):
-                new_step = Step.objects.create(process=new_process, order=step_order, title=st.title, details=st.details)
-                # Copy images from source step to new step
-                for img in st.images.all().order_by('order', 'id'):
-                    from django.core.files.base import ContentFile
-                    import os
-                    if os.path.exists(img.image.path):
-                        with open(img.image.path, 'rb') as f:
-                            StepImage.objects.create(
-                                step=new_step, 
-                                image=ContentFile(f.read(), name=os.path.basename(img.image.name)),
-                                order=img.order,
-                                substep_index=img.substep_index
-                            )
-                step_order += 1
-        tpl = sync_process_to_template(new_process.id)
-    return JsonResponse({'ok': True, 'template_id': tpl.id})
+        # Check if a template already exists for this process
+        existing_template = ProcessTemplate.objects.filter(source_process=source_process).first()
+        if existing_template:
+            return JsonResponse({'ok': False, 'error': f'A template already exists for this process: "{existing_template.name}". Please delete it first or choose a different process.'}, status=400)
+        
+        # Create template directly linked to the source process
+        template = ProcessTemplate.objects.create(
+            name=name,
+            module=module,
+            source_process=source_process,
+            description=source_process.summary or source_process.description or '',
+            is_active=True
+        )
+        
+        # Auto-sync template from the source process (this will create TemplateSteps)
+        from .services.templates import sync_process_to_template
+        sync_process_to_template(source_process.id)
+        
+        return JsonResponse({'ok': True, 'template_id': template.id, 'process_id': source_process.id})
 
 
 @login_required

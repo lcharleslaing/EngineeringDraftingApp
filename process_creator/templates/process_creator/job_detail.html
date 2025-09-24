@@ -64,20 +64,40 @@
           {% if s.subtasks.all %}
             <ul class="mt-3 space-y-1">
               {% for t in s.subtasks.all %}
+                {% with substep_index=forloop.counter0 %}
                 <li>
-              <label class="label cursor-pointer justify-start gap-2">
-                <input type="checkbox" class="checkbox checkbox-sm js-subtask" data-id="{{ t.id }}" {% if t.completed %}checked{% endif %}>
-                <span>{{ t.text }}</span>
-                <div class="flex gap-1 ml-auto">
+                  <label class="label cursor-pointer justify-start gap-2">
+                    <input type="checkbox" class="checkbox checkbox-sm js-subtask" data-id="{{ t.id }}" {% if t.completed %}checked{% endif %}>
+                    <span>{{ t.text }}</span>
+                    <div class="flex gap-1 ml-auto">
+                      {% with src=source_by_order|dict_get:s.order %}
+                        {% if src and src|has_sub_images:substep_index %}
+                          <button type="button" class="btn btn-ghost btn-xs js-toggle-images" data-step="{{ s.order }}" data-sub="{{ substep_index }}">Images</button>
+                        {% endif %}
+                      {% endwith %}
+                      <button type="button" class="btn btn-ghost btn-xs js-paste-subtask-image" data-step="{{ s.id }}" data-subtask="{{ substep_index }}" title="Paste image for this subtask">📋</button>
+                    </div>
+                  </label>
+                  
+                  <!-- Images for this specific substep -->
                   {% with src=source_by_order|dict_get:s.order %}
-                    {% if src and src|has_sub_images:forloop.counter0 %}
-                      <button type="button" class="btn btn-ghost btn-xs js-toggle-images" data-step="{{ s.order }}" data-sub="{{ forloop.counter0 }}">Images</button>
+                    {% if src and src|has_sub_images:substep_index %}
+                      <div class="ml-6 mt-2 js-substep-images" data-step="{{ s.order }}" data-sub="{{ substep_index }}">
+                        <div class="text-xs text-gray-500 mb-2">DEBUG: Step {{ s.order }}, Substep {{ substep_index }}, Has images: {{ src|has_sub_images:substep_index }}</div>
+                        <div class="grid grid-cols-4 md:grid-cols-6 gap-2">
+                          {% for img in src.images.all %}
+                            {% if img.substep_index == substep_index %}
+                              <figure class="border rounded p-1 cursor-pointer js-thumb" data-sub="{% if img.substep_index is not None %}{{ img.substep_index }}{% else %}{% endif %}" data-full="{{ img.image.url }}">
+                                <img src="{{ img.image.url }}" class="w-full h-20 object-cover rounded" />
+                              </figure>
+                            {% endif %}
+                          {% endfor %}
+                        </div>
+                      </div>
                     {% endif %}
                   {% endwith %}
-                  <button type="button" class="btn btn-ghost btn-xs js-paste-subtask-image" data-step="{{ s.id }}" data-subtask="{{ forloop.counter0 }}" title="Paste image for this subtask">📋</button>
-                </div>
-              </label>
                 </li>
+                {% endwith %}
               {% endfor %}
             </ul>
           {% endif %}
@@ -104,19 +124,6 @@
             </div>
           </div>
 
-          {% with src=source_by_order|dict_get:s.order %}
-          {% if src %}
-            <div class="mt-3 hidden js-images" data-step="{{ s.order }}">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {% for img in src.images.all %}
-                  <figure class="border rounded p-2" data-sub="{% if img.substep_index is not None %}{{ img.substep_index }}{% else %}{% endif %}">
-                    <img src="{{ img.image.url }}" class="max-w-full" />
-                  </figure>
-                {% endfor %}
-              </div>
-            </div>
-          {% endif %}
-          {% endwith %}
         </div>
       </div>
     {% endfor %}
@@ -135,35 +142,55 @@ document.querySelectorAll('.js-subtask').forEach(cb=>{
   });
 });
 
+// Initialize all substep images as hidden by default
+document.querySelectorAll('.js-substep-images').forEach(panel=>{
+  panel.classList.add('hidden');
+});
+
 document.querySelectorAll('.js-toggle-images').forEach(btn=>{
   btn.addEventListener('click', (e)=>{
     const step = e.currentTarget.dataset.step;
     const sub = e.currentTarget.dataset.sub;
-    const container = document.querySelector(`.js-images[data-step="${step}"]`);
-    if (!container) return;
-    // Hide all other image panels
-    document.querySelectorAll('.js-images').forEach(panel=>{
-      if (panel !== container) panel.classList.add('hidden');
-    });
-    // Reset other step buttons text
-    document.querySelectorAll('.js-toggle-images').forEach(b=>{
-      if (!b.dataset.sub && b !== e.currentTarget) b.textContent = 'View Images';
-    });
-    const filterBySub = (sub !== undefined && sub !== '');
-    if (filterBySub) {
-      container.querySelectorAll('figure').forEach(fig=>{
-        const idx = fig.getAttribute('data-sub');
-        // Only show images that have a matching substep_index (not empty/null)
-        fig.style.display = (idx === sub && idx !== '') ? '' : 'none';
-      });
-      // Ensure container is visible when filtering by substep
-      container.classList.remove('hidden');
+    
+    // Check if this is a substep image button
+    if (sub !== undefined && sub !== '') {
+      // Handle substep images
+      const substepContainer = document.querySelector(`.js-substep-images[data-step="${step}"][data-sub="${sub}"]`);
+      if (substepContainer) {
+        // Hide all other substep image panels
+        document.querySelectorAll('.js-substep-images').forEach(panel=>{
+          if (panel !== substepContainer) panel.classList.add('hidden');
+        });
+        // Reset all button texts
+        document.querySelectorAll('.js-toggle-images').forEach(b=>{
+          b.textContent = b.textContent.replace('Hide', 'View').replace('Images', 'Images');
+        });
+        // Toggle this substep's images
+        substepContainer.classList.toggle('hidden');
+        e.currentTarget.textContent = substepContainer.classList.contains('hidden') ? 'Images' : 'Hide Images';
+      }
     } else {
-      // Toggle visibility and clear any filtering (show all)
-      const hidden = container.classList.contains('hidden');
-      container.classList.toggle('hidden');
-      container.querySelectorAll('figure').forEach(fig=>{ fig.style.display=''; });
-      e.currentTarget.textContent = hidden ? 'Hide Images' : 'View Images';
+      // Handle step-level images - show all substep images for this step
+      const stepContainers = document.querySelectorAll(`.js-substep-images[data-step="${step}"]`);
+      const hasVisibleImages = Array.from(stepContainers).some(panel => !panel.classList.contains('hidden'));
+      
+      if (hasVisibleImages) {
+        // Hide all substep images for this step
+        stepContainers.forEach(panel => panel.classList.add('hidden'));
+        e.currentTarget.textContent = e.currentTarget.textContent.replace('Hide', 'View');
+      } else {
+        // Show all substep images for this step
+        document.querySelectorAll('.js-substep-images').forEach(panel => panel.classList.add('hidden'));
+        stepContainers.forEach(panel => panel.classList.remove('hidden'));
+        e.currentTarget.textContent = e.currentTarget.textContent.replace('View', 'Hide');
+      }
+      
+      // Reset other step buttons
+      document.querySelectorAll('.js-toggle-images').forEach(b=>{
+        if (!b.dataset.sub && b !== e.currentTarget) {
+          b.textContent = b.textContent.replace('Hide', 'View');
+        }
+      });
     }
   });
 });
@@ -197,7 +224,10 @@ const imgOverlay = (()=>{
 })();
 
 // Delegated preview for source step images
-document.querySelectorAll('.js-images').forEach(container=>{
+// Click handlers for source process images (removed - now using substep images only)
+
+// Delegated preview for uploaded thumbnails
+document.querySelectorAll('.js-thumbs').forEach(container=>{
   container.addEventListener('click', (e)=>{
     if (e.target.closest('.js-del-thumb')) return;
     const img = e.target.closest('img');
@@ -205,8 +235,8 @@ document.querySelectorAll('.js-images').forEach(container=>{
   });
 });
 
-// Delegated preview for uploaded thumbnails
-document.querySelectorAll('.js-thumbs').forEach(container=>{
+// Delegated preview for substep images
+document.querySelectorAll('.js-substep-images').forEach(container=>{
   container.addEventListener('click', (e)=>{
     if (e.target.closest('.js-del-thumb')) return;
     const img = e.target.closest('img');
