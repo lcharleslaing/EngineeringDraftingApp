@@ -110,7 +110,7 @@
             <div class="mt-3 hidden js-images" data-step="{{ s.order }}">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {% for img in src.images.all %}
-                  <figure class="border rounded p-2" data-sub="{{ img.substep_index|default:-1 }}">
+                  <figure class="border rounded p-2" data-sub="{% if img.substep_index is not None %}{{ img.substep_index }}{% else %}{% endif %}">
                     <img src="{{ img.image.url }}" class="max-w-full" />
                   </figure>
                 {% endfor %}
@@ -151,10 +151,13 @@ document.querySelectorAll('.js-toggle-images').forEach(btn=>{
       if (!b.dataset.sub && b !== e.currentTarget) b.textContent = 'View Images';
     });
     const filterBySub = (sub !== undefined && sub !== '');
+    console.log('Filtering by substep:', sub, 'type:', typeof sub);
     if (filterBySub) {
       container.querySelectorAll('figure').forEach(fig=>{
         const idx = fig.getAttribute('data-sub');
-        fig.style.display = (idx === sub) ? '' : 'none';
+        console.log('Figure data-sub:', idx, 'type:', typeof idx, 'matches:', idx === sub);
+        // Only show images that have a matching substep_index (not empty/null)
+        fig.style.display = (idx === sub && idx !== '') ? '' : 'none';
       });
       // Ensure container is visible when filtering by substep
       container.classList.remove('hidden');
