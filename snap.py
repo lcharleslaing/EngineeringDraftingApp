@@ -1,14 +1,28 @@
 import os
 import datetime
 
+"""Project snapshot utility.
+
+Generates a timestamped markdown file under `snapshots/` that contains a
+recursive listing of files in the project with inline code blocks for
+text-based files. Binary/media files are listed but contents are skipped.
+
+Excludes common noise like virtual environments, node modules, git metadata,
+bytecode caches, and the snapshots directory itself.
+"""
+
 # Configuration
-PROJECT_DIR = "kemco_dashboard"  # Folder to scan
+PROJECT_DIR = "."  # Scan the repository root
 SNAPSHOT_DIR = "snapshots"
-IGNORE_DIRS = {'__pycache__', '.git', '.idea', 'node_modules', 'env', 'venv', '.venv', SNAPSHOT_DIR}
+IGNORE_DIRS = {
+    '__pycache__', '.git', '.idea', '.vscode', 'node_modules',
+    'env', 'venv', '.venv', SNAPSHOT_DIR
+}
 IGNORE_FILES = {'.DS_Store'}
 SKIP_CONTENT_EXTS = {
     '.jpg', '.jpeg', '.png', '.gif', '.svg', '.bmp', '.ico',
-    '.webp', '.pdf', '.woff', '.ttf', '.zip', '.exe', '.dll'
+    '.webp', '.pdf', '.woff', '.woff2', '.ttf', '.otf',
+    '.zip', '.gz', '.tar', '.7z', '.rar', '.exe', '.dll'
 }
 
 def generate_snapshot():
@@ -20,7 +34,8 @@ def generate_snapshot():
     out_path = os.path.join(out_dir, out_filename)
 
     lines = [
-        f"# Snapshot of {PROJECT_DIR}",
+        f"# Project Snapshot",
+        f"**Root:** {os.path.abspath(PROJECT_DIR)}",
         f"**Generated:** {now.strftime('%Y-%m-%d %I:%M:%S %p')}",
         "\n---\n"
     ]
@@ -28,6 +43,7 @@ def generate_snapshot():
     root_path = os.path.abspath(PROJECT_DIR)
 
     for dirpath, dirnames, filenames in os.walk(root_path):
+        # Filter out ignored directories in-place so os.walk does not descend
         dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS]
         rel_dir = os.path.relpath(dirpath, root_path).replace("\\", "/")
 
@@ -47,7 +63,8 @@ def generate_snapshot():
             try:
                 with open(full_path, "r", encoding="utf-8") as f:
                     content = f.read().replace("```", "``\\`")
-                code = f"```{ext[1:]}\n{content}\n```\n"
+                language = ext[1:] if ext else ""
+                code = f"```{language}\n{content}\n```\n"
                 lines.append(code)
             except Exception as e:
                 lines.append(f"*Could not read file: {e}*\n\n")
