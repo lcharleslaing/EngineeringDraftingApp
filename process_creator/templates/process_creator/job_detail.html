@@ -140,6 +140,11 @@
                         <button class="btn btn-xs btn-primary js-view-preview" data-url="{{ att.pdf_preview.url }}">View PDF</button>
                         <a href="{{ att.file.url }}" class="btn btn-xs btn-outline" download="{{ att.original_name }}">Download</a>
                       </div>
+                    {% elif att.conversion_status == 'failed' %}
+                      <div class="mt-1">
+                        <span class="text-xs text-warning">PDF conversion failed</span>
+                        <a href="{{ att.file.url }}" class="btn btn-xs btn-outline" download="{{ att.original_name }}">Download Original</a>
+                      </div>
                     {% else %}
                       <div class="mt-1">
                         <a href="{{ att.file.url }}" class="btn btn-xs btn-outline" download="{{ att.original_name }}">Download</a>

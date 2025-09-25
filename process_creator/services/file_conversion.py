@@ -110,56 +110,58 @@ def convert_dwg_to_pdf(input_path, output_path):
     Handles multiple layouts
     """
     try:
-        # Create temporary script file
-        script_content = f'''
--PLOT
-Model
-DWG To PDF.pc3
-ANSI_A
-Inches
-Landscape
-No
-Plot
-{output_path}
-Y
-'''
+        # AutoCAD Core Console paths (try common versions)
+        autocad_paths = [
+            r"C:\Program Files\Autodesk\AutoCAD 2025\accoreconsole.exe",
+            r"C:\Program Files\Autodesk\AutoCAD 2024\accoreconsole.exe",
+            r"C:\Program Files\Autodesk\AutoCAD 2023\accoreconsole.exe",
+        ]
+        
+        autocad_exe = None
+        for path in autocad_paths:
+            if os.path.exists(path):
+                autocad_exe = path
+                break
+        
+        if not autocad_exe:
+            raise FileConversionError("AutoCAD Core Console not found")
+        
+        logger.info(f"Using AutoCAD: {autocad_exe}")
+        
+        # Create a script file for EXPORTPDF command
+        script_content = f'-EXPORTPDF All "{output_path}"\n'
         
         with tempfile.NamedTemporaryFile(mode='w', suffix='.scr', delete=False) as script_file:
             script_file.write(script_content)
             script_path = script_file.name
         
         try:
-            # AutoCAD Core Console paths (try common versions)
-            autocad_paths = [
-                r"C:\Program Files\Autodesk\AutoCAD 2025\accoreconsole.exe",
-                r"C:\Program Files\Autodesk\AutoCAD 2024\accoreconsole.exe",
-                r"C:\Program Files\Autodesk\AutoCAD 2023\accoreconsole.exe",
-            ]
-            
-            autocad_exe = None
-            for path in autocad_paths:
-                if os.path.exists(path):
-                    autocad_exe = path
-                    break
-            
-            if not autocad_exe:
-                raise FileConversionError("AutoCAD Core Console not found")
-            
-            logger.info(f"Using AutoCAD: {autocad_exe}")
-            
-            # Run AutoCAD Core Console
+            # Use script file instead of /c parameter
             cmd = [autocad_exe, '/i', input_path, '/s', script_path]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
             
-            if result.returncode != 0:
-                raise FileConversionError(f"AutoCAD conversion failed: {result.stderr}")
-            
-            return True
-            
+            logger.info(f"Running command: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)  # 5 minutes timeout
         finally:
             # Clean up script file
             if os.path.exists(script_path):
                 os.unlink(script_path)
+        
+        logger.info(f"AutoCAD return code: {result.returncode}")
+        logger.info(f"AutoCAD stdout: {result.stdout}")
+        logger.info(f"AutoCAD stderr: {result.stderr}")
+        
+        if result.returncode != 0:
+            raise FileConversionError(f"AutoCAD conversion failed: {result.stderr}")
+        
+        # Check if output file was created
+        if not os.path.exists(output_path):
+            raise FileConversionError("PDF output file was not created")
+        
+        # Check if file has content
+        if os.path.getsize(output_path) == 0:
+            raise FileConversionError("PDF output file is empty")
+        
+        return True
                 
     except subprocess.TimeoutExpired:
         raise FileConversionError("AutoCAD conversion timed out")
