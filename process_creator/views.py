@@ -18,6 +18,9 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 import os
 import json
 import openai
+import logging
+
+logger = logging.getLogger(__name__)
 import re
 from decimal import Decimal
 from io import BytesIO
