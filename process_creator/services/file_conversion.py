@@ -4,10 +4,16 @@ File conversion service for converting Office and CAD files to PDF
 import os
 import tempfile
 import subprocess
-import win32com.client as win32
 from django.conf import settings
 from django.core.files import File
 import logging
+
+try:
+    import win32com.client as win32
+    WIN32_AVAILABLE = True
+except ImportError:
+    WIN32_AVAILABLE = False
+    win32 = None
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +61,9 @@ def convert_idw_to_pdf(input_path, output_path):
     Convert Inventor IDW files to PDF using Inventor COM
     Handles multi-sheet drawings
     """
+    if not WIN32_AVAILABLE:
+        raise FileConversionError("win32com not available - cannot convert IDW files")
+    
     try:
         # Create Inventor application
         inv = win32.Dispatch("Inventor.Application")
@@ -135,6 +144,8 @@ Y
             
             if not autocad_exe:
                 raise FileConversionError("AutoCAD Core Console not found")
+            
+            logger.info(f"Using AutoCAD: {autocad_exe}")
             
             # Run AutoCAD Core Console
             cmd = [autocad_exe, '/i', input_path, '/s', script_path]

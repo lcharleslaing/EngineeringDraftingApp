@@ -2482,6 +2482,18 @@ def job_step_attachment_upload(request, job_step_id: int):
             logger.error(f"File conversion failed for {original_name}: {str(e)}")
             attachment.conversion_status = 'failed'
             attachment.save()
+            # Return error info for debugging
+            return JsonResponse({
+                'ok': True,
+                'id': attachment.id,
+                'url': attachment.file.url,
+                'original_name': original_name,
+                'file_size': format_file_size(file.size),
+                'icon': get_file_icon(file_extension),
+                'has_preview': False,
+                'preview_url': None,
+                'conversion_error': str(e)
+            })
     
     return JsonResponse({
         'ok': True,
