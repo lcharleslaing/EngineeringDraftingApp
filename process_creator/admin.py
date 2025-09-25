@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Module, Process, Step, StepImage, StepLink, StepFile, AIInteraction, ProcessTemplate, TemplateStep, Job, JobStep, JobSubtask, JobStepImage
+from .models import Module, Process, Step, StepImage, StepLink, StepFile, AIInteraction, ProcessTemplate, TemplateStep, Job, JobStep, JobSubtask, JobStepImage, JobStepAttachment
 
 
 @admin.register(Module)
@@ -105,4 +105,11 @@ class JobSubtaskAdmin(admin.ModelAdmin):
 class JobStepImageAdmin(admin.ModelAdmin):
     list_display = ("job_step", "subtask_index", "order", "uploaded_at")
     list_filter = ("job_step",)
+    ordering = ("job_step", "order")
+
+@admin.register(JobStepAttachment)
+class JobStepAttachmentAdmin(admin.ModelAdmin):
+    list_display = ("job_step", "original_name", "file_extension", "file_size", "conversion_status", "has_preview", "uploaded_at")
+    list_filter = ("conversion_status", "job_step")
+    search_fields = ("original_name",)
     ordering = ("job_step", "order")

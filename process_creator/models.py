@@ -244,3 +244,44 @@ class JobStepImage(models.Model):
     class Meta:
         ordering = ["order", "id"]
 
+
+class JobStepAttachment(models.Model):
+    """File attachments for job steps (Excel, Word, DWG, IDW, etc.)"""
+    job_step = models.ForeignKey(JobStep, related_name="attachments", on_delete=models.CASCADE)
+    file = models.FileField(upload_to="job_attachments/")
+    original_name = models.CharField(max_length=255, help_text="Original filename")
+    mime_type = models.CharField(max_length=100, blank=True)
+    file_size = models.PositiveIntegerField(null=True, blank=True, help_text="File size in bytes")
+    subtask_index = models.PositiveIntegerField(null=True, blank=True, help_text="0-based index of the bullet (subtask) within job_step.details")
+    order = models.PositiveIntegerField(default=1)
+    # PDF preview (for converted files)
+    pdf_preview = models.FileField(upload_to="job_attachments/previews/", null=True, blank=True, help_text="Converted PDF for inline viewing")
+    conversion_status = models.CharField(max_length=20, choices=[
+        ('pending', 'Pending'),
+        ('success', 'Success'),
+        ('failed', 'Failed'),
+    ], default='pending')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return f"{self.original_name} ({self.job_step})"
+
+    @property
+    def file_extension(self):
+        """Get file extension in lowercase"""
+        return self.original_name.split('.')[-1].lower() if '.' in self.original_name else ''
+
+    @property
+    def is_convertible(self):
+        """Check if file can be converted to PDF"""
+        return self.file_extension in ['docx', 'doc', 'xlsx', 'xls', 'dwg', 'idw']
+
+    @property
+    def has_preview(self):
+        """Check if PDF preview is available"""
+        return self.pdf_preview and self.conversion_status == 'success'
+

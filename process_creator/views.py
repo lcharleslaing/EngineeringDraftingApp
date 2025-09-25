@@ -2413,6 +2413,104 @@ def job_step_image_delete(request, job_step_id: int, image_id: int):
 @login_required
 @require_app_access('process_creator', action='edit')
 @require_POST
+def job_step_attachment_upload(request, job_step_id: int):
+    """Upload file attachment to job step with auto-conversion to PDF"""
+    from .models import JobStepAttachment
+    from .services.file_conversion import convert_file_to_pdf, get_file_icon, format_file_size
+    import mimetypes
+    import os
+    
+    step = get_object_or_404(JobStep, id=job_step_id)
+    
+    if 'file' not in request.FILES:
+        return JsonResponse({'ok': False, 'error': 'No file provided'}, status=400)
+    
+    file = request.FILES['file']
+    subtask_index = request.POST.get('subtask_index')
+    
+    # Validate file size (25MB limit)
+    max_size = 25 * 1024 * 1024  # 25MB
+    if file.size > max_size:
+        return JsonResponse({'ok': False, 'error': 'File too large. Maximum size is 25MB.'}, status=400)
+    
+    # Get file info
+    original_name = file.name
+    mime_type = mimetypes.guess_type(original_name)[0] or 'application/octet-stream'
+    file_extension = original_name.split('.')[-1].lower() if '.' in original_name else ''
+    
+    # Create attachment
+    attachment = JobStepAttachment.objects.create(
+        job_step=step,
+        file=file,
+        original_name=original_name,
+        mime_type=mime_type,
+        file_size=file.size,
+        subtask_index=int(subtask_index) if subtask_index else None,
+        order=step.attachments.count() + 1
+    )
+    
+    # Try to convert to PDF if supported
+    if attachment.is_convertible:
+        try:
+            # Save file temporarily for conversion
+            temp_path = os.path.join(settings.MEDIA_ROOT, 'temp', f'temp_{attachment.id}_{original_name}')
+            os.makedirs(os.path.dirname(temp_path), exist_ok=True)
+            
+            with open(temp_path, 'wb') as f:
+                for chunk in file.chunks():
+                    f.write(chunk)
+            
+            # Convert to PDF
+            pdf_path = convert_file_to_pdf(temp_path, file_extension)
+            
+            # Save PDF preview
+            with open(pdf_path, 'rb') as pdf_file:
+                attachment.pdf_preview.save(
+                    f'preview_{attachment.id}.pdf',
+                    File(pdf_file),
+                    save=True
+                )
+            
+            attachment.conversion_status = 'success'
+            attachment.save()
+            
+            # Clean up temp files
+            os.unlink(temp_path)
+            os.unlink(pdf_path)
+            
+        except Exception as e:
+            logger.error(f"File conversion failed for {original_name}: {str(e)}")
+            attachment.conversion_status = 'failed'
+            attachment.save()
+    
+    return JsonResponse({
+        'ok': True,
+        'id': attachment.id,
+        'url': attachment.file.url,
+        'original_name': original_name,
+        'file_size': format_file_size(file.size),
+        'icon': get_file_icon(file_extension),
+        'has_preview': attachment.has_preview,
+        'preview_url': attachment.pdf_preview.url if attachment.has_preview else None
+    })
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
+def job_step_attachment_delete(request, job_step_id: int, attachment_id: int):
+    """Delete file attachment from job step"""
+    from .models import JobStepAttachment
+    
+    step = get_object_or_404(JobStep, id=job_step_id)
+    attachment = get_object_or_404(JobStepAttachment, id=attachment_id, job_step=step)
+    attachment.delete()
+    return JsonResponse({'ok': True})
+
+
+@login_required
+@require_app_access('process_creator', action='edit')
+@require_POST
 def job_update_from_template(request, job_id: int):
     job = get_object_or_404(Job.objects.select_related('template'), id=job_id)
     tpl = job.template

@@ -70,6 +70,9 @@ urlpatterns = [
     path("steps/<int:job_step_id>/notes/", views.job_step_notes_update, name="job_step_notes_update"),
     path("steps/<int:job_step_id>/images/upload/", views.job_step_image_upload, name="job_step_image_upload"),
     path("steps/<int:job_step_id>/images/<int:image_id>/delete/", views.job_step_image_delete, name="job_step_image_delete"),
+    # File attachments
+    path("steps/<int:job_step_id>/attachments/upload/", views.job_step_attachment_upload, name="job_step_attachment_upload"),
+    path("steps/<int:job_step_id>/attachments/<int:attachment_id>/delete/", views.job_step_attachment_delete, name="job_step_attachment_delete"),
 ]
 
 

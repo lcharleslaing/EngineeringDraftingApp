@@ -102,7 +102,7 @@
             </ul>
           {% endif %}
 
-          <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label class="label"><span class="label-text">Paste Images</span></label>
               <div class="flex items-center gap-2">
@@ -114,6 +114,37 @@
                   <div class="relative group">
                     <img src="{{ im.image.url }}" class="w-20 h-20 object-cover rounded cursor-pointer js-thumb border border-base-300" data-full="{{ im.image.url }}" />
                     <button class="btn btn-xs btn-error absolute -top-2 -right-2 hidden group-hover:block js-del-thumb" data-step="{{ s.id }}" data-img="{{ im.id }}">✕</button>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+            <div>
+              <label class="label"><span class="label-text">File Attachments</span></label>
+              <div class="flex items-center gap-2">
+                <button type="button" class="btn btn-sm js-paste-file" data-step="{{ s.id }}" title="Paste File from Clipboard">📎 Paste</button>
+                <input type="file" accept=".docx,.doc,.xlsx,.xls,.dwg,.idw,.pdf" class="file-input file-input-sm file-input-bordered js-upload-attachment" data-step="{{ s.id }}" />
+              </div>
+              <div class="mt-2 flex flex-wrap gap-2 js-attachments" data-step="{{ s.id }}">
+                {% for att in s.attachments.all %}
+                  <div class="relative group bg-base-100 border border-base-300 rounded p-2 min-w-32">
+                    <div class="flex items-center gap-2">
+                      <span class="text-lg">{{ att.icon|default:"📎" }}</span>
+                      <div class="flex-1 min-w-0">
+                        <div class="text-xs font-medium truncate" title="{{ att.original_name }}">{{ att.original_name }}</div>
+                        <div class="text-xs text-base-content/60">{{ att.file_size|default:"Unknown size" }}</div>
+                      </div>
+                      <button class="btn btn-xs btn-error js-del-attachment" data-step="{{ s.id }}" data-att="{{ att.id }}">✕</button>
+                    </div>
+                    {% if att.has_preview %}
+                      <div class="mt-1">
+                        <button class="btn btn-xs btn-primary js-view-preview" data-url="{{ att.pdf_preview.url }}">View PDF</button>
+                        <a href="{{ att.file.url }}" class="btn btn-xs btn-outline" download="{{ att.original_name }}">Download</a>
+                      </div>
+                    {% else %}
+                      <div class="mt-1">
+                        <a href="{{ att.file.url }}" class="btn btn-xs btn-outline" download="{{ att.original_name }}">Download</a>
+                      </div>
+                    {% endif %}
                   </div>
                 {% endfor %}
               </div>
@@ -424,6 +455,152 @@ document.querySelectorAll('.js-thumb').forEach(img => {
     img.onload();
   }
 });
+
+// File attachment functionality
+document.querySelectorAll('.js-upload-attachment').forEach(input => {
+  input.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const stepId = e.target.dataset.step;
+    const form = new FormData();
+    form.append('file', file);
+    
+    try {
+      const res = await fetch(`/process-creator/steps/${stepId}/attachments/upload/`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': (document.cookie.split('csrftoken=')[1]||'').split(';')[0]},
+        body: form
+      });
+      
+      const data = await res.json();
+      if (data.ok) {
+        addAttachmentChip(stepId, data);
+        e.target.value = ''; // Clear input
+      } else {
+        alert('Upload failed: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      alert('Upload failed: ' + err.message);
+    }
+  });
+});
+
+// Paste file from clipboard
+document.querySelectorAll('.js-paste-file').forEach(btn => {
+  btn.addEventListener('click', async (e) => {
+    const stepId = e.target.dataset.step;
+    
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      let fileFound = false;
+      
+      for (const clipboardItem of clipboardItems) {
+        for (const type of clipboardItem.types) {
+          if (type.startsWith('application/') || type.startsWith('image/')) {
+            const blob = await clipboardItem.getType(type);
+            const file = new File([blob], `pasted_file_${Date.now()}.${type.split('/')[1]}`, { type });
+            
+            const form = new FormData();
+            form.append('file', file);
+            
+            const res = await fetch(`/process-creator/steps/${stepId}/attachments/upload/`, {
+              method: 'POST',
+              headers: {'X-CSRFToken': (document.cookie.split('csrftoken=')[1]||'').split(';')[0]},
+              body: form
+            });
+            
+            const data = await res.json();
+            if (data.ok) {
+              addAttachmentChip(stepId, data);
+              fileFound = true;
+            }
+          }
+        }
+      }
+      
+      if (!fileFound) {
+        alert('No supported files found in clipboard');
+      }
+    } catch (err) {
+      console.error('Paste error:', err);
+      alert('Paste failed: ' + err.message);
+    }
+  });
+});
+
+// Delete attachments
+document.querySelectorAll('.js-del-attachment').forEach(btn => {
+  btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const stepId = btn.dataset.step;
+    const attId = btn.dataset.att;
+    
+    const res = await fetch(`/process-creator/steps/${stepId}/attachments/${attId}/delete/`, {
+      method: 'POST',
+      headers: {'X-CSRFToken': (document.cookie.split('csrftoken=')[1]||'').split(';')[0]}
+    });
+    
+    if (res.ok) {
+      btn.closest('.group').remove();
+    } else {
+      console.error('Delete failed:', res.status, res.statusText);
+    }
+  });
+});
+
+// View PDF preview
+document.querySelectorAll('.js-view-preview').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    const url = e.target.dataset.url;
+    window.open(url, '_blank');
+  });
+});
+
+// Helper function to add attachment chip
+function addAttachmentChip(stepId, data) {
+  const container = document.querySelector(`.js-attachments[data-step="${stepId}"]`);
+  if (!container) return;
+  
+  const chip = document.createElement('div');
+  chip.className = 'relative group bg-base-100 border border-base-300 rounded p-2 min-w-32';
+  chip.innerHTML = `
+    <div class="flex items-center gap-2">
+      <span class="text-lg">${data.icon || '📎'}</span>
+      <div class="flex-1 min-w-0">
+        <div class="text-xs font-medium truncate" title="${data.original_name}">${data.original_name}</div>
+        <div class="text-xs text-base-content/60">${data.file_size || 'Unknown size'}</div>
+      </div>
+      <button class="btn btn-xs btn-error js-del-attachment" data-step="${stepId}" data-att="${data.id}">✕</button>
+    </div>
+    <div class="mt-1">
+      ${data.has_preview ? `<button class="btn btn-xs btn-primary js-view-preview" data-url="${data.preview_url}">View PDF</button>` : ''}
+      <a href="${data.url}" class="btn btn-xs btn-outline" download="${data.original_name}">Download</a>
+    </div>
+  `;
+  
+  // Add event listeners to new buttons
+  chip.querySelector('.js-del-attachment').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const attId = e.target.dataset.att;
+    const res = await fetch(`/process-creator/steps/${stepId}/attachments/${attId}/delete/`, {
+      method: 'POST',
+      headers: {'X-CSRFToken': (document.cookie.split('csrftoken=')[1]||'').split(';')[0]}
+    });
+    if (res.ok) {
+      chip.remove();
+    }
+  });
+  
+  if (data.has_preview) {
+    chip.querySelector('.js-view-preview').addEventListener('click', (e) => {
+      window.open(e.target.dataset.url, '_blank');
+    });
+  }
+  
+  container.appendChild(chip);
+}
 
 // Note: Word downloads are handled by the browser. To auto-open, enable
 // the browser's setting to "Always open files of this type" for .docx.
